@@ -179,6 +179,7 @@ Per-model:
 
 ```json
 {
+  "is_default": true,
   "max_context_window": 200000,
   "dflash_enabled": true,
   "dflash_draft_model": "/Users/dr/Models/Text/Qwen3.6-35B-A3B-DFlash",
@@ -193,6 +194,41 @@ Global cache:
   "hot_cache_max_size": "70GB"
 }
 ```
+
+## Validated
+
+- **Preserve-thinking is required** for `Qwen3.6-35B-A3B-8bit` in the intended agentic workflow.
+- **PR #814 behavior works end-to-end** after local integration:
+  - `reasoning_content` / Anthropic `thinking` can be reconstructed back into `<think>` blocks
+  - preserved reasoning can be recalled on later turns
+- **DFlash is useful only when it falls back early enough**:
+  - `dflash_max_ctx = 2000` was clearly better than the default 4096
+- **The best tested `prefill_step_size` was 2048**
+- **Prompt-side batching helps**, and **`prefill_batch_size = 8`** is a strong practical live default
+- **Hot cache at 70GB** is working and persisted
+- **The app now persists the important local tuning knobs**:
+  - `dflash_max_ctx`
+  - `prefill_batch_size`
+  - `prefill_step_size`
+
+## Invalidated
+
+- **“25” is not a winning live value in oMLX for this workload**
+  - `max_concurrent_requests = 25` was not a good practical setting
+  - `prefill_batch_size = 25` under higher concurrent load was worse than 12 and 8
+- **The current oMLX `max_concurrent_requests` knob is not equivalent to llama.cpp batch sizing**
+  - it behaves more like concurrency / decode-side batching
+  - it is not the same thing as llama.cpp prompt-eval batching
+- **Tiny prompt chunks do not help**
+  - shrinking `prefill_step_size` from 2048 toward 128 consistently hurt throughput
+
+## Operational note
+
+There is also a local helper script for maintenance and rebuilds:
+
+- `scripts/update-local-build.sh`
+
+It is currently uncommitted unless explicitly added later.
 
 ## Summary
 
