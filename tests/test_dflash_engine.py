@@ -14,6 +14,7 @@ class TestDFlashModelSettings:
         assert settings.dflash_enabled is False
         assert settings.dflash_draft_model is None
         assert settings.dflash_draft_quant_bits is None
+        assert settings.dflash_max_ctx is None
 
     def test_no_verify_mode_field(self):
         """verify_mode and speculative_tokens were removed in v2."""
@@ -41,11 +42,13 @@ class TestDFlashModelSettings:
             "dflash_enabled": True,
             "dflash_draft_model": "z-lab/Qwen3.5-4B-DFlash",
             "dflash_draft_quant_bits": 4,
+            "dflash_max_ctx": 2000,
         }
         settings = ModelSettings.from_dict(data)
         assert settings.dflash_enabled is True
         assert settings.dflash_draft_model == "z-lab/Qwen3.5-4B-DFlash"
         assert settings.dflash_draft_quant_bits == 4
+        assert settings.dflash_max_ctx == 2000
 
     def test_from_dict_ignores_removed_fields(self):
         """Old settings with verify_mode/speculative_tokens should be ignored."""
@@ -62,12 +65,14 @@ class TestDFlashModelSettings:
             dflash_enabled=True,
             dflash_draft_model="z-lab/Qwen3.5-4B-DFlash",
             dflash_draft_quant_bits=4,
+            dflash_max_ctx=2000,
         )
         d = original.to_dict()
         restored = ModelSettings.from_dict(d)
         assert restored.dflash_enabled == original.dflash_enabled
         assert restored.dflash_draft_model == original.dflash_draft_model
         assert restored.dflash_draft_quant_bits == original.dflash_draft_quant_bits
+        assert restored.dflash_max_ctx == original.dflash_max_ctx
 
 
 class TestDFlashEngineInit:

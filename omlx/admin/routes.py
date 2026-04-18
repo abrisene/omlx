@@ -122,6 +122,7 @@ class ModelSettingsRequest(BaseModel):
     dflash_enabled: Optional[bool] = None
     dflash_draft_model: Optional[str] = None
     dflash_draft_quant_bits: Optional[int] = None
+    dflash_max_ctx: Optional[int] = None
     reasoning_parser: Optional[str] = None
     is_pinned: Optional[bool] = None
     is_default: Optional[bool] = None
@@ -148,6 +149,8 @@ class GlobalSettingsRequest(BaseModel):
 
     # Scheduler settings
     max_concurrent_requests: Optional[int] = None
+    prefill_batch_size: Optional[int] = None
+    prefill_step_size: Optional[int] = None
 
     # Cache settings
     cache_enabled: Optional[bool] = None
@@ -1610,6 +1613,10 @@ async def update_model_settings(
         current_settings.dflash_draft_model = request.dflash_draft_model or None
     if "dflash_draft_quant_bits" in sent:
         current_settings.dflash_draft_quant_bits = request.dflash_draft_quant_bits or None
+    if "dflash_max_ctx" in sent:
+        current_settings.dflash_max_ctx = (
+            request.dflash_max_ctx if request.dflash_max_ctx and request.dflash_max_ctx > 0 else None
+        )
 
     if "reasoning_parser" in sent:
         current_settings.reasoning_parser = request.reasoning_parser or None
@@ -1838,6 +1845,8 @@ async def get_global_settings(is_admin: bool = Depends(require_admin)):
         },
         "scheduler": {
             "max_concurrent_requests": global_settings.scheduler.max_concurrent_requests,
+            "prefill_batch_size": global_settings.scheduler.prefill_batch_size,
+            "prefill_step_size": global_settings.scheduler.prefill_step_size,
         },
         "cache": {
             "enabled": global_settings.cache.enabled,
@@ -2055,6 +2064,10 @@ async def update_global_settings(
         global_settings.scheduler.max_concurrent_requests = (
             request.max_concurrent_requests
         )
+    if request.prefill_batch_size is not None:
+        global_settings.scheduler.prefill_batch_size = request.prefill_batch_size
+    if request.prefill_step_size is not None:
+        global_settings.scheduler.prefill_step_size = request.prefill_step_size
 
     # Apply cache settings
     cache_changed = False

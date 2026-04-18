@@ -252,11 +252,19 @@ class TestSchedulerSettings:
         """Test default values."""
         settings = SchedulerSettings()
         assert settings.max_concurrent_requests == 8
+        assert settings.prefill_batch_size == 1
+        assert settings.prefill_step_size == 2048
 
     def test_custom_values(self):
         """Test custom values."""
-        settings = SchedulerSettings(max_concurrent_requests=128)
+        settings = SchedulerSettings(
+            max_concurrent_requests=128,
+            prefill_batch_size=4,
+            prefill_step_size=1024,
+        )
         assert settings.max_concurrent_requests == 128
+        assert settings.prefill_batch_size == 4
+        assert settings.prefill_step_size == 1024
 
     def test_to_dict(self):
         """Test conversion to dictionary."""
@@ -264,6 +272,8 @@ class TestSchedulerSettings:
         result = settings.to_dict()
         assert result == {
             "max_concurrent_requests": 8,
+            "prefill_batch_size": 1,
+            "prefill_step_size": 2048,
         }
 
     def test_from_dict(self):
@@ -271,6 +281,20 @@ class TestSchedulerSettings:
         data = {"max_concurrent_requests": 512}
         settings = SchedulerSettings.from_dict(data)
         assert settings.max_concurrent_requests == 512
+        assert settings.prefill_batch_size == 1
+        assert settings.prefill_step_size == 2048
+
+    def test_from_dict_with_prefill_settings(self):
+        """Test creation from dictionary with explicit prefill settings."""
+        data = {
+            "max_concurrent_requests": 32,
+            "prefill_batch_size": 25,
+            "prefill_step_size": 25,
+        }
+        settings = SchedulerSettings.from_dict(data)
+        assert settings.max_concurrent_requests == 32
+        assert settings.prefill_batch_size == 25
+        assert settings.prefill_step_size == 25
 
     def test_from_dict_backwards_compat(self):
         """Test creation from dictionary with old keys."""

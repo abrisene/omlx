@@ -64,11 +64,22 @@ class DFlashEngine(BaseEngine):
         self._fallback_engine: BaseEngine | None = None
         self._in_fallback_mode = False
 
-        raw = os.environ.get("DFLASH_MAX_CTX", str(DEFAULT_MAX_DFLASH_CTX)).strip()
-        try:
-            self._max_dflash_ctx = max(1, int(raw))
-        except ValueError:
-            self._max_dflash_ctx = DEFAULT_MAX_DFLASH_CTX
+        configured_max_ctx = (
+            getattr(model_settings, "dflash_max_ctx", None)
+            if model_settings is not None
+            else None
+        )
+        if configured_max_ctx is not None:
+            try:
+                self._max_dflash_ctx = max(1, int(configured_max_ctx))
+            except (TypeError, ValueError):
+                self._max_dflash_ctx = DEFAULT_MAX_DFLASH_CTX
+        else:
+            raw = os.environ.get("DFLASH_MAX_CTX", str(DEFAULT_MAX_DFLASH_CTX)).strip()
+            try:
+                self._max_dflash_ctx = max(1, int(raw))
+            except ValueError:
+                self._max_dflash_ctx = DEFAULT_MAX_DFLASH_CTX
 
     @property
     def model_name(self) -> str:

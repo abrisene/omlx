@@ -304,6 +304,7 @@ class SchedulerConfig:
     # Scheduling policy
     policy: SchedulingPolicy = SchedulingPolicy.FCFS
     # BatchGenerator settings (passed directly to mlx-lm)
+    prefill_batch_size: int = 1
     completion_batch_size: int = 32
     prefill_step_size: int = 2048
 
@@ -984,7 +985,7 @@ class Scheduler:
             stop_tokens=stop_tokens_seq,
             sampler=sampler,
             logits_processors=logits_processors if logits_processors else None,
-            prefill_batch_size=1,
+            prefill_batch_size=self.config.prefill_batch_size,
             completion_batch_size=self.config.completion_batch_size,
             prefill_step_size=self.config.prefill_step_size,
         )

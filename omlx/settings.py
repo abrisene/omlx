@@ -215,6 +215,8 @@ class SchedulerSettings:
     """Scheduler configuration settings."""
 
     max_concurrent_requests: int = 8
+    prefill_batch_size: int = 1
+    prefill_step_size: int = 2048
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -231,7 +233,13 @@ class SchedulerSettings:
             value = data.get("completion_batch_size")
         if value is None:
             value = 8
-        return cls(max_concurrent_requests=value)
+        prefill_batch_size = data.get("prefill_batch_size", 1)
+        prefill_step_size = data.get("prefill_step_size", 2048)
+        return cls(
+            max_concurrent_requests=value,
+            prefill_batch_size=prefill_batch_size,
+            prefill_step_size=prefill_step_size,
+        )
 
 
 @dataclass
@@ -1059,6 +1067,16 @@ class GlobalSettings:
                 f"Invalid max_concurrent_requests: "
                 f"{self.scheduler.max_concurrent_requests} (must be > 0)"
             )
+        if self.scheduler.prefill_batch_size <= 0:
+            errors.append(
+                f"Invalid prefill_batch_size: "
+                f"{self.scheduler.prefill_batch_size} (must be > 0)"
+            )
+        if self.scheduler.prefill_step_size <= 0:
+            errors.append(
+                f"Invalid prefill_step_size: "
+                f"{self.scheduler.prefill_step_size} (must be > 0)"
+            )
 
         # Cache validation
         if self.cache.ssd_cache_max_size.lower() != "auto":
@@ -1155,6 +1173,8 @@ class GlobalSettings:
         return SchedulerConfig(
             max_num_seqs=self.scheduler.max_concurrent_requests,
             completion_batch_size=self.scheduler.max_concurrent_requests,
+            prefill_batch_size=self.scheduler.prefill_batch_size,
+            prefill_step_size=self.scheduler.prefill_step_size,
             initial_cache_blocks=self.cache.initial_cache_blocks,
         )
 
