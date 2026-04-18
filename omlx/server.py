@@ -755,13 +755,28 @@ def get_sampling_params(
     req_top_p: float | None,
     model_id: str | None = None,
     req_min_p: float | None = None,
+    req_top_n_sigma: float | None = None,
+    req_min_k: int | None = None,
+    req_dynamic_temperature: bool | None = None,
+    req_dynatemp_low: float | None = None,
+    req_dynatemp_high: float | None = None,
+    req_dynatemp_exponent: float | None = None,
+    req_temperature_last: bool | None = None,
+    req_sampler_priority: list[str] | None = None,
+    req_dry_multiplier: float | None = None,
+    req_dry_base: float | None = None,
+    req_dry_allowed_length: int | None = None,
+    req_dry_sequence_breakers: list[str] | None = None,
     req_presence_penalty: float | None = None,
     req_frequency_penalty: float | None = None,
     req_max_tokens: int | None = None,
     ocr_defaults: dict | None = None,
     req_xtc_probability: float | None = None,
     req_xtc_threshold: float | None = None,
-) -> tuple[float, float, int, float, float, float, float, int, float, float]:
+) -> tuple[
+    float, float, int, float, float, float, float, int, float, float,
+    float, int, bool, float, float, float, bool, list[str], float, float, int, list[str]
+]:
     """
     Get effective sampling parameters with per-model settings support.
 
@@ -770,7 +785,8 @@ def get_sampling_params(
     - Otherwise: request > model settings > ocr_defaults > global defaults
 
     Returns:
-        tuple of (temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold)
+        tuple of resolved sampling parameters including classic controls, XTC,
+        dynamic temperature, ordering, DRY, top-nσ, and min-k.
     """
     global_sampling = _server_state.sampling
 
@@ -888,15 +904,126 @@ def get_sampling_params(
     # XTC threshold: request > default (0.1 = safe default when probability is set)
     xtc_threshold = req_xtc_threshold if req_xtc_threshold is not None else 0.1
 
+    # Top-nσ: request > model > default disabled
+    if req_top_n_sigma is not None:
+        top_n_sigma = req_top_n_sigma
+    elif model_settings and getattr(model_settings, 'top_n_sigma', None) is not None:
+        top_n_sigma = model_settings.top_n_sigma
+    else:
+        top_n_sigma = 0.0
+
+    # Min-k: request > model > default disabled
+    if req_min_k is not None:
+        min_k = req_min_k
+    elif model_settings and getattr(model_settings, 'min_k', None) is not None:
+        min_k = model_settings.min_k
+    else:
+        min_k = 0
+
+    # Dynamic temperature controls
+    if req_dynamic_temperature is not None:
+        dynamic_temperature = req_dynamic_temperature
+    elif model_settings and getattr(model_settings, 'dynamic_temperature', None) is not None:
+        dynamic_temperature = bool(model_settings.dynamic_temperature)
+    else:
+        dynamic_temperature = False
+
+    if req_dynatemp_low is not None:
+        dynatemp_low = req_dynatemp_low
+    elif model_settings and getattr(model_settings, 'dynatemp_low', None) is not None:
+        dynatemp_low = model_settings.dynatemp_low
+    else:
+        dynatemp_low = 0.7
+
+    if req_dynatemp_high is not None:
+        dynatemp_high = req_dynatemp_high
+    elif model_settings and getattr(model_settings, 'dynatemp_high', None) is not None:
+        dynatemp_high = model_settings.dynatemp_high
+    else:
+        dynatemp_high = 1.2
+
+    if req_dynatemp_exponent is not None:
+        dynatemp_exponent = req_dynatemp_exponent
+    elif model_settings and getattr(model_settings, 'dynatemp_exponent', None) is not None:
+        dynatemp_exponent = model_settings.dynatemp_exponent
+    else:
+        dynatemp_exponent = 1.0
+
+    # Ordering controls
+    if req_temperature_last is not None:
+        temperature_last = req_temperature_last
+    elif model_settings and getattr(model_settings, 'temperature_last', None) is not None:
+        temperature_last = bool(model_settings.temperature_last)
+    else:
+        temperature_last = False
+
+    if req_sampler_priority is not None:
+        sampler_priority = req_sampler_priority
+    elif model_settings and getattr(model_settings, 'sampler_priority', None) is not None:
+        sampler_priority = list(model_settings.sampler_priority)
+    else:
+        sampler_priority = [
+            "repetition_penalty",
+            "presence_penalty",
+            "frequency_penalty",
+            "dry",
+            "top_k",
+            "top_p",
+            "min_p",
+            "top_n_sigma",
+            "min_k",
+            "dynamic_temperature",
+            "temperature",
+            "xtc",
+        ]
+
+    # DRY controls
+    if req_dry_multiplier is not None:
+        dry_multiplier = req_dry_multiplier
+    elif model_settings and getattr(model_settings, 'dry_multiplier', None) is not None:
+        dry_multiplier = model_settings.dry_multiplier
+    else:
+        dry_multiplier = 0.0
+
+    if req_dry_base is not None:
+        dry_base = req_dry_base
+    elif model_settings and getattr(model_settings, 'dry_base', None) is not None:
+        dry_base = model_settings.dry_base
+    else:
+        dry_base = 1.75
+
+    if req_dry_allowed_length is not None:
+        dry_allowed_length = req_dry_allowed_length
+    elif model_settings and getattr(model_settings, 'dry_allowed_length', None) is not None:
+        dry_allowed_length = model_settings.dry_allowed_length
+    else:
+        dry_allowed_length = 2
+
+    if req_dry_sequence_breakers is not None:
+        dry_sequence_breakers = req_dry_sequence_breakers
+    elif model_settings and getattr(model_settings, 'dry_sequence_breakers', None) is not None:
+        dry_sequence_breakers = list(model_settings.dry_sequence_breakers)
+    else:
+        dry_sequence_breakers = ["\n", ":", "\"", "*"]
+
     logger.debug(
         f"Sampling params: temperature={temperature}, top_p={top_p}, top_k={top_k}, "
         f"repetition_penalty={repetition_penalty}, min_p={min_p}, presence_penalty={presence_penalty}, "
         f"frequency_penalty={frequency_penalty}, max_tokens={max_tokens}, "
-        f"xtc_probability={xtc_probability}, xtc_threshold={xtc_threshold}"
+        f"xtc_probability={xtc_probability}, xtc_threshold={xtc_threshold}, "
+        f"top_n_sigma={top_n_sigma}, min_k={min_k}, "
+        f"dynamic_temperature={dynamic_temperature}, temperature_last={temperature_last}, "
+        f"dry_multiplier={dry_multiplier}"
         f"{' (forced)' if force else ''}"
         f"{f' (model: {model_id})' if model_id else ''}"
     )
-    return temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold
+    return (
+        temperature, top_p, top_k, repetition_penalty, min_p,
+        presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold,
+        top_n_sigma, min_k, dynamic_temperature, dynatemp_low, dynatemp_high,
+        dynatemp_exponent, temperature_last, sampler_priority, dry_multiplier,
+        dry_base, dry_allowed_length, dry_sequence_breakers,
+    )
 
 
 def _resolve_thinking_budget(request, model_id: str | None) -> int | None:
@@ -1817,9 +1944,27 @@ async def create_completion(
         total_prompt_tokens = 0
         total_cached_tokens = 0
 
-        temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold = get_sampling_params(
+        (
+            temperature, top_p, top_k, repetition_penalty, min_p,
+            presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold,
+            top_n_sigma, min_k, dynamic_temperature, dynatemp_low, dynatemp_high,
+            dynatemp_exponent, temperature_last, sampler_priority, dry_multiplier,
+            dry_base, dry_allowed_length, dry_sequence_breakers,
+        ) = get_sampling_params(
             request.temperature, request.top_p, request.model,
             req_min_p=getattr(request, 'min_p', None),
+            req_top_n_sigma=getattr(request, 'top_n_sigma', None),
+            req_min_k=getattr(request, 'min_k', None),
+            req_dynamic_temperature=getattr(request, 'dynamic_temperature', None),
+            req_dynatemp_low=getattr(request, 'dynatemp_low', None),
+            req_dynatemp_high=getattr(request, 'dynatemp_high', None),
+            req_dynatemp_exponent=getattr(request, 'dynatemp_exponent', None),
+            req_temperature_last=getattr(request, 'temperature_last', None),
+            req_sampler_priority=getattr(request, 'sampler_priority', None),
+            req_dry_multiplier=getattr(request, 'dry_multiplier', None),
+            req_dry_base=getattr(request, 'dry_base', None),
+            req_dry_allowed_length=getattr(request, 'dry_allowed_length', None),
+            req_dry_sequence_breakers=getattr(request, 'dry_sequence_breakers', None),
             req_presence_penalty=getattr(request, 'presence_penalty', None),
             req_frequency_penalty=getattr(request, 'frequency_penalty', None),
             req_max_tokens=request.max_tokens,
@@ -1840,6 +1985,18 @@ async def create_completion(
                 frequency_penalty=frequency_penalty,
                 xtc_probability=xtc_probability,
                 xtc_threshold=xtc_threshold,
+                top_n_sigma=top_n_sigma,
+                min_k=min_k,
+                dynamic_temperature=dynamic_temperature,
+                dynatemp_low=dynatemp_low,
+                dynatemp_high=dynatemp_high,
+                dynatemp_exponent=dynatemp_exponent,
+                temperature_last=temperature_last,
+                sampler_priority=sampler_priority,
+                dry_multiplier=dry_multiplier,
+                dry_base=dry_base,
+                dry_allowed_length=dry_allowed_length,
+                dry_sequence_breakers=dry_sequence_breakers,
                 stop=request.stop,
                 seed=request.seed,
             )
@@ -2020,9 +2177,27 @@ async def create_chat_completion(
     validate_context_window(num_prompt_tokens, request.model)
 
     # Prepare kwargs
-    temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold = get_sampling_params(
+    (
+        temperature, top_p, top_k, repetition_penalty, min_p,
+        presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold,
+        top_n_sigma, min_k, dynamic_temperature, dynatemp_low, dynatemp_high,
+        dynatemp_exponent, temperature_last, sampler_priority, dry_multiplier,
+        dry_base, dry_allowed_length, dry_sequence_breakers,
+    ) = get_sampling_params(
         request.temperature, request.top_p, request.model,
         req_min_p=getattr(request, 'min_p', None),
+        req_top_n_sigma=getattr(request, 'top_n_sigma', None),
+        req_min_k=getattr(request, 'min_k', None),
+        req_dynamic_temperature=getattr(request, 'dynamic_temperature', None),
+        req_dynatemp_low=getattr(request, 'dynatemp_low', None),
+        req_dynatemp_high=getattr(request, 'dynatemp_high', None),
+        req_dynatemp_exponent=getattr(request, 'dynatemp_exponent', None),
+        req_temperature_last=getattr(request, 'temperature_last', None),
+        req_sampler_priority=getattr(request, 'sampler_priority', None),
+        req_dry_multiplier=getattr(request, 'dry_multiplier', None),
+        req_dry_base=getattr(request, 'dry_base', None),
+        req_dry_allowed_length=getattr(request, 'dry_allowed_length', None),
+        req_dry_sequence_breakers=getattr(request, 'dry_sequence_breakers', None),
         req_presence_penalty=getattr(request, 'presence_penalty', None),
         req_frequency_penalty=getattr(request, 'frequency_penalty', None),
         req_max_tokens=request.max_tokens,
@@ -2040,6 +2215,18 @@ async def create_chat_completion(
         "frequency_penalty": frequency_penalty,
         "xtc_probability": xtc_probability,
         "xtc_threshold": xtc_threshold,
+        "top_n_sigma": top_n_sigma,
+        "min_k": min_k,
+        "dynamic_temperature": dynamic_temperature,
+        "dynatemp_low": dynatemp_low,
+        "dynatemp_high": dynatemp_high,
+        "dynatemp_exponent": dynatemp_exponent,
+        "temperature_last": temperature_last,
+        "sampler_priority": sampler_priority,
+        "dry_multiplier": dry_multiplier,
+        "dry_base": dry_base,
+        "dry_allowed_length": dry_allowed_length,
+        "dry_sequence_breakers": dry_sequence_breakers,
     }
 
     # Add seed for reproducible generation (best-effort)
@@ -2446,9 +2633,27 @@ async def stream_completion(
     first_token_time = None
     last_output = None
 
-    temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold = get_sampling_params(
+    (
+        temperature, top_p, top_k, repetition_penalty, min_p,
+        presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold,
+        top_n_sigma, min_k, dynamic_temperature, dynatemp_low, dynatemp_high,
+        dynatemp_exponent, temperature_last, sampler_priority, dry_multiplier,
+        dry_base, dry_allowed_length, dry_sequence_breakers,
+    ) = get_sampling_params(
         request.temperature, request.top_p, request.model,
         req_min_p=getattr(request, 'min_p', None),
+        req_top_n_sigma=getattr(request, 'top_n_sigma', None),
+        req_min_k=getattr(request, 'min_k', None),
+        req_dynamic_temperature=getattr(request, 'dynamic_temperature', None),
+        req_dynatemp_low=getattr(request, 'dynatemp_low', None),
+        req_dynatemp_high=getattr(request, 'dynatemp_high', None),
+        req_dynatemp_exponent=getattr(request, 'dynatemp_exponent', None),
+        req_temperature_last=getattr(request, 'temperature_last', None),
+        req_sampler_priority=getattr(request, 'sampler_priority', None),
+        req_dry_multiplier=getattr(request, 'dry_multiplier', None),
+        req_dry_base=getattr(request, 'dry_base', None),
+        req_dry_allowed_length=getattr(request, 'dry_allowed_length', None),
+        req_dry_sequence_breakers=getattr(request, 'dry_sequence_breakers', None),
         req_presence_penalty=getattr(request, 'presence_penalty', None),
         req_frequency_penalty=getattr(request, 'frequency_penalty', None),
         req_max_tokens=request.max_tokens,
@@ -2468,6 +2673,18 @@ async def stream_completion(
             frequency_penalty=frequency_penalty,
             xtc_probability=xtc_probability,
             xtc_threshold=xtc_threshold,
+            top_n_sigma=top_n_sigma,
+            min_k=min_k,
+            dynamic_temperature=dynamic_temperature,
+            dynatemp_low=dynatemp_low,
+            dynatemp_high=dynatemp_high,
+            dynatemp_exponent=dynatemp_exponent,
+            temperature_last=temperature_last,
+            sampler_priority=sampler_priority,
+            dry_multiplier=dry_multiplier,
+            dry_base=dry_base,
+            dry_allowed_length=dry_allowed_length,
+            dry_sequence_breakers=dry_sequence_breakers,
             stop=request.stop,
             seed=request.seed,
         ):
@@ -3235,8 +3452,26 @@ async def create_anthropic_message(
         messages = extractor(messages, max_tool_result_tokens, engine.tokenizer)
 
     # Prepare kwargs
-    temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold = get_sampling_params(
+    (
+        temperature, top_p, top_k, repetition_penalty, min_p,
+        presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold,
+        top_n_sigma, min_k, dynamic_temperature, dynatemp_low, dynatemp_high,
+        dynatemp_exponent, temperature_last, sampler_priority, dry_multiplier,
+        dry_base, dry_allowed_length, dry_sequence_breakers,
+    ) = get_sampling_params(
         request.temperature, request.top_p, request.model,
+        req_top_n_sigma=getattr(request, 'top_n_sigma', None),
+        req_min_k=getattr(request, 'min_k', None),
+        req_dynamic_temperature=getattr(request, 'dynamic_temperature', None),
+        req_dynatemp_low=getattr(request, 'dynatemp_low', None),
+        req_dynatemp_high=getattr(request, 'dynatemp_high', None),
+        req_dynatemp_exponent=getattr(request, 'dynatemp_exponent', None),
+        req_temperature_last=getattr(request, 'temperature_last', None),
+        req_sampler_priority=getattr(request, 'sampler_priority', None),
+        req_dry_multiplier=getattr(request, 'dry_multiplier', None),
+        req_dry_base=getattr(request, 'dry_base', None),
+        req_dry_allowed_length=getattr(request, 'dry_allowed_length', None),
+        req_dry_sequence_breakers=getattr(request, 'dry_sequence_breakers', None),
         req_max_tokens=request.max_tokens,
     )
 
@@ -3251,6 +3486,18 @@ async def create_anthropic_message(
         "frequency_penalty": frequency_penalty,
         "xtc_probability": xtc_probability,
         "xtc_threshold": xtc_threshold,
+        "top_n_sigma": top_n_sigma,
+        "min_k": min_k,
+        "dynamic_temperature": dynamic_temperature,
+        "dynatemp_low": dynatemp_low,
+        "dynatemp_high": dynatemp_high,
+        "dynatemp_exponent": dynatemp_exponent,
+        "temperature_last": temperature_last,
+        "sampler_priority": sampler_priority,
+        "dry_multiplier": dry_multiplier,
+        "dry_base": dry_base,
+        "dry_allowed_length": dry_allowed_length,
+        "dry_sequence_breakers": dry_sequence_breakers,
     }
 
     # Add thinking budget if applicable
@@ -3658,8 +3905,29 @@ async def create_response(
     validate_context_window(num_prompt_tokens, request.model)
 
     # Build sampling kwargs
-    temperature, top_p, top_k, repetition_penalty, min_p, presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold = (
-        get_sampling_params(request.temperature, request.top_p, request.model, req_max_tokens=request.max_output_tokens)
+    (
+        temperature, top_p, top_k, repetition_penalty, min_p,
+        presence_penalty, frequency_penalty, max_tokens, xtc_probability, xtc_threshold,
+        top_n_sigma, min_k, dynamic_temperature, dynatemp_low, dynatemp_high,
+        dynatemp_exponent, temperature_last, sampler_priority, dry_multiplier,
+        dry_base, dry_allowed_length, dry_sequence_breakers,
+    ) = get_sampling_params(
+        request.temperature,
+        request.top_p,
+        request.model,
+        req_top_n_sigma=getattr(request, 'top_n_sigma', None),
+        req_min_k=getattr(request, 'min_k', None),
+        req_dynamic_temperature=getattr(request, 'dynamic_temperature', None),
+        req_dynatemp_low=getattr(request, 'dynatemp_low', None),
+        req_dynatemp_high=getattr(request, 'dynatemp_high', None),
+        req_dynatemp_exponent=getattr(request, 'dynatemp_exponent', None),
+        req_temperature_last=getattr(request, 'temperature_last', None),
+        req_sampler_priority=getattr(request, 'sampler_priority', None),
+        req_dry_multiplier=getattr(request, 'dry_multiplier', None),
+        req_dry_base=getattr(request, 'dry_base', None),
+        req_dry_allowed_length=getattr(request, 'dry_allowed_length', None),
+        req_dry_sequence_breakers=getattr(request, 'dry_sequence_breakers', None),
+        req_max_tokens=request.max_output_tokens,
     )
     chat_kwargs = {
         "max_tokens": max_tokens,
@@ -3672,6 +3940,18 @@ async def create_response(
         "frequency_penalty": frequency_penalty,
         "xtc_probability": xtc_probability,
         "xtc_threshold": xtc_threshold,
+        "top_n_sigma": top_n_sigma,
+        "min_k": min_k,
+        "dynamic_temperature": dynamic_temperature,
+        "dynatemp_low": dynatemp_low,
+        "dynatemp_high": dynatemp_high,
+        "dynatemp_exponent": dynatemp_exponent,
+        "temperature_last": temperature_last,
+        "sampler_priority": sampler_priority,
+        "dry_multiplier": dry_multiplier,
+        "dry_base": dry_base,
+        "dry_allowed_length": dry_allowed_length,
+        "dry_sequence_breakers": dry_sequence_breakers,
     }
 
     # Add seed for reproducible generation (best-effort)
