@@ -3415,6 +3415,10 @@ class Scheduler:
 
                     # Decode full output
                     output.output_text = self.tokenizer.decode(request.output_token_ids)
+                    if getattr(request, 'needs_think_prefix', False):
+                        think_tag = getattr(self.tokenizer, 'think_start', '<think>')
+                        if think_tag not in output.output_text:
+                            output.output_text = think_tag + "\n" + output.output_text
                     request.output_text = output.output_text
 
                 # Extract cache for future reuse.

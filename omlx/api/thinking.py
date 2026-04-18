@@ -24,6 +24,8 @@ _THINKING_PATTERN = re.compile(r'<think>(.*?)</think>', re.DOTALL)
 # Handle case where <think> is missing but </think> is present
 # (scheduler prepends <think>\n but the tag may be split)
 _THINKING_TAIL_PATTERN = re.compile(r'^(.*?)</think>', re.DOTALL)
+# Handle incomplete trailing think block with no closing tag yet
+_THINKING_OPEN_ONLY_PATTERN = re.compile(r'^<think>\s*(.*)$', re.DOTALL)
 
 
 def extract_thinking(text: str) -> Tuple[str, str]:
@@ -59,6 +61,15 @@ def extract_thinking(text: str) -> Tuple[str, str]:
     if thinking_parts:
         thinking = "\n".join(thinking_parts).strip()
         return (thinking, remaining.strip())
+
+    # Handle partial: open tag present but close tag never arrived.
+    # This can happen when the model is interrupted / max_tokens is reached
+    # before emitting </think>. In that case, treat the remainder as reasoning.
+    if '<think>' in text and '</think>' not in text:
+        match = _THINKING_OPEN_ONLY_PATTERN.match(text)
+        if match:
+            thinking = match.group(1).strip()
+            return (thinking, "")
 
     # Handle partial: content before </think> without <think> tag
     if '</think>' in text and '<think>' not in text:

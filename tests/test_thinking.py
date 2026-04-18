@@ -54,6 +54,12 @@ class TestExtractThinking:
         assert thinking == "reasoning content"
         assert content == "Answer"
 
+    def test_open_tag_without_close_tag(self):
+        """Open <think> without closing tag should still be treated as reasoning."""
+        thinking, content = extract_thinking("<think>\nreasoning content that never closes")
+        assert thinking == "reasoning content that never closes"
+        assert content == ""
+
     def test_multiple_think_blocks(self):
         """Multiple think blocks should all be extracted."""
         thinking, content = extract_thinking(

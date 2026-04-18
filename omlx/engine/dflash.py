@@ -257,6 +257,25 @@ class DFlashEngine(BaseEngine):
     def _should_fallback(self, prompt_tokens: list[int]) -> bool:
         return len(prompt_tokens) >= self._max_dflash_ctx
 
+    @staticmethod
+    def _thinking_requested(
+        chat_template_kwargs: dict[str, Any] | None,
+        kwargs: dict[str, Any],
+    ) -> bool:
+        """Return True when the caller expects explicit thinking behavior.
+
+        DFlash currently only forwards temperature into the draft runtime and
+        does not implement oMLX's thinking-budget / reasoning-channel handling.
+        For thinking-enabled requests, fall back to the standard engine path so
+        the model can close the `<think>` block properly and the API layer can
+        extract `reasoning_content`.
+        """
+        if kwargs.get("thinking_budget") is not None:
+            return True
+        if chat_template_kwargs and chat_template_kwargs.get("enable_thinking") is not False:
+            return True
+        return False
+
     def _run_generate_streaming(
         self,
         prompt_tokens: list[int],
@@ -521,6 +540,27 @@ class DFlashEngine(BaseEngine):
 
         template_tools = convert_tools_for_template(tools) if tools else None
         ct_kwargs = kwargs.pop("chat_template_kwargs", None)
+        if self._thinking_requested(ct_kwargs, kwargs):
+            if not self._in_fallback_mode:
+                logger.info(
+                    "DFlash thinking fallback: request requires reasoning-aware handling, "
+                    "switching to %s engine",
+                    self._fallback_engine_type,
+                )
+                await self._evict_dflash_and_start_fallback()
+            return await self._fallback_engine.chat(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                min_p=min_p,
+                repetition_penalty=repetition_penalty,
+                presence_penalty=presence_penalty,
+                tools=tools,
+                chat_template_kwargs=ct_kwargs,
+                **kwargs,
+            )
         prompt = self._apply_chat_template(
             messages, template_tools, chat_template_kwargs=ct_kwargs
         )
@@ -550,6 +590,29 @@ class DFlashEngine(BaseEngine):
 
         template_tools = convert_tools_for_template(tools) if tools else None
         ct_kwargs = kwargs.pop("chat_template_kwargs", None)
+        if self._thinking_requested(ct_kwargs, kwargs):
+            if not self._in_fallback_mode:
+                logger.info(
+                    "DFlash thinking fallback: request requires reasoning-aware handling, "
+                    "switching to %s engine",
+                    self._fallback_engine_type,
+                )
+                await self._evict_dflash_and_start_fallback()
+            async for output in self._fallback_engine.stream_chat(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                min_p=min_p,
+                repetition_penalty=repetition_penalty,
+                presence_penalty=presence_penalty,
+                tools=tools,
+                chat_template_kwargs=ct_kwargs,
+                **kwargs,
+            ):
+                yield output
+            return
         prompt = self._apply_chat_template(
             messages, template_tools, chat_template_kwargs=ct_kwargs
         )
