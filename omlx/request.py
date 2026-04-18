@@ -60,6 +60,18 @@ class SamplingParams:
     min_p: float = 0.0
     xtc_probability: float = 0.0
     xtc_threshold: float = 0.1
+    top_n_sigma: float = 0.0
+    min_k: int = 0
+    dynamic_temperature: bool = False
+    dynatemp_low: float = 0.7
+    dynatemp_high: float = 1.2
+    dynatemp_exponent: float = 1.0
+    temperature_last: bool = False
+    sampler_priority: Optional[List[str]] = None
+    dry_multiplier: float = 0.0
+    dry_base: float = 1.75
+    dry_allowed_length: int = 2
+    dry_sequence_breakers: Optional[List[str]] = None
     repetition_penalty: float = 1.0
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
@@ -85,6 +97,23 @@ class SamplingParams:
             self.stop = []
         if self.stop_token_ids is None:
             self.stop_token_ids = []
+        if self.sampler_priority is None:
+            self.sampler_priority = [
+                "repetition_penalty",
+                "presence_penalty",
+                "frequency_penalty",
+                "dry",
+                "top_k",
+                "top_p",
+                "min_p",
+                "top_n_sigma",
+                "min_k",
+                "dynamic_temperature",
+                "temperature",
+                "xtc",
+            ]
+        if self.dry_sequence_breakers is None:
+            self.dry_sequence_breakers = ["\n", ":", "\"", "*"]
 
 
 @dataclass

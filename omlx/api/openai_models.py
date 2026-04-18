@@ -162,8 +162,20 @@ class ChatCompletionRequest(BaseModel):
     stream_options: Optional[StreamOptions] = None
     stop: Optional[List[str]] = None
     min_p: float | None = None
+    top_n_sigma: float | None = None
+    min_k: int | None = None
     xtc_probability: float | None = None
     xtc_threshold: float | None = None
+    dynamic_temperature: bool | None = None
+    dynatemp_low: float | None = None
+    dynatemp_high: float | None = None
+    dynatemp_exponent: float | None = None
+    temperature_last: bool | None = None
+    sampler_priority: Optional[List[str]] = None
+    dry_multiplier: float | None = None
+    dry_base: float | None = None
+    dry_allowed_length: int | None = None
+    dry_sequence_breakers: Optional[List[str]] = None
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     # Tool calling
@@ -254,8 +266,20 @@ class CompletionRequest(BaseModel):
     stream_options: Optional[StreamOptions] = None
     stop: Optional[List[str]] = None
     min_p: float | None = None
+    top_n_sigma: float | None = None
+    min_k: int | None = None
     xtc_probability: float | None = None
     xtc_threshold: float | None = None
+    dynamic_temperature: bool | None = None
+    dynatemp_low: float | None = None
+    dynatemp_high: float | None = None
+    dynatemp_exponent: float | None = None
+    temperature_last: bool | None = None
+    sampler_priority: Optional[List[str]] = None
+    dry_multiplier: float | None = None
+    dry_base: float | None = None
+    dry_allowed_length: int | None = None
+    dry_sequence_breakers: Optional[List[str]] = None
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     # Seed for reproducible generation (best-effort)

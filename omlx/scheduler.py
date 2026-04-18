@@ -12,6 +12,7 @@ The scheduler follows vLLM's design with:
 """
 
 import copy
+import contextlib
 import gc
 import logging
 import time
@@ -29,7 +30,7 @@ from mlx_lm.generate import (
     generation_stream,
 )
 from mlx_lm.models.cache import make_prompt_cache
-from mlx_lm.sample_utils import make_sampler, make_logits_processors
+from mlx_lm.sample_utils import make_logits_processors
 
 from pathlib import Path
 
@@ -37,6 +38,7 @@ from .cache.paged_cache import PagedCacheManager
 from .cache.prefix_cache import BlockAwarePrefixCache
 from .request import Request, RequestOutput, RequestStatus, SamplingParams
 from .exceptions import is_cache_corruption_error
+from .sampling import make_dry_processor, make_ordered_sampler
 
 
 def _sync_and_clear_cache():
@@ -948,7 +950,7 @@ class Scheduler:
 
     def _create_batch_generator(self, sampling_params: SamplingParams) -> BatchGenerator:
         """Create a BatchGenerator with the given sampling parameters."""
-        sampler = make_sampler(
+        sampler = make_ordered_sampler(
             temp=sampling_params.temperature,
             top_p=sampling_params.top_p,
             min_p=sampling_params.min_p,
@@ -956,6 +958,14 @@ class Scheduler:
             xtc_probability=sampling_params.xtc_probability,
             xtc_threshold=sampling_params.xtc_threshold,
             xtc_special_tokens=self._xtc_special_tokens,
+            top_n_sigma=sampling_params.top_n_sigma,
+            min_k=sampling_params.min_k,
+            dynamic_temperature=sampling_params.dynamic_temperature,
+            dynatemp_low=sampling_params.dynatemp_low,
+            dynatemp_high=sampling_params.dynatemp_high,
+            dynatemp_exponent=sampling_params.dynatemp_exponent,
+            temperature_last=sampling_params.temperature_last,
+            sampler_priority=sampling_params.sampler_priority,
         )
 
         # Create logits processors for repetition/presence/frequency penalties
@@ -970,6 +980,20 @@ class Scheduler:
             if sampling_params.frequency_penalty != 0.0
             else None,
         )
+
+        if sampling_params.dry_multiplier > 0.0:
+            breaker_token_ids: set[int] = set()
+            for breaker in sampling_params.dry_sequence_breakers or []:
+                with contextlib.suppress(Exception):
+                    breaker_token_ids.update(self.tokenizer.encode(breaker))
+            logits_processors.append(
+                make_dry_processor(
+                    sampling_params.dry_multiplier,
+                    sampling_params.dry_base,
+                    sampling_params.dry_allowed_length,
+                    breaker_token_ids,
+                )
+            )
 
         # Convert stop tokens from Set[int] to Sequence[Sequence[int]]
         # for the new BatchGenerator API (each stop token is a sequence).
@@ -1375,7 +1399,7 @@ class Scheduler:
         self, sampling_params: SamplingParams, request: Any = None
     ) -> Tuple[Callable[[mx.array], mx.array], List[Callable]]:
         """Build per-request sampler and logits processors."""
-        sampler = make_sampler(
+        sampler = make_ordered_sampler(
             temp=sampling_params.temperature,
             top_p=sampling_params.top_p,
             min_p=sampling_params.min_p,
@@ -1383,6 +1407,14 @@ class Scheduler:
             xtc_probability=sampling_params.xtc_probability,
             xtc_threshold=sampling_params.xtc_threshold,
             xtc_special_tokens=self._xtc_special_tokens,
+            top_n_sigma=sampling_params.top_n_sigma,
+            min_k=sampling_params.min_k,
+            dynamic_temperature=sampling_params.dynamic_temperature,
+            dynatemp_low=sampling_params.dynatemp_low,
+            dynatemp_high=sampling_params.dynatemp_high,
+            dynatemp_exponent=sampling_params.dynatemp_exponent,
+            temperature_last=sampling_params.temperature_last,
+            sampler_priority=sampling_params.sampler_priority,
         )
         logits_processors = make_logits_processors(
             repetition_penalty=sampling_params.repetition_penalty
@@ -1395,6 +1427,20 @@ class Scheduler:
             if sampling_params.frequency_penalty != 0.0
             else None,
         )
+
+        if sampling_params.dry_multiplier > 0.0:
+            breaker_token_ids: set[int] = set()
+            for breaker in sampling_params.dry_sequence_breakers or []:
+                with contextlib.suppress(Exception):
+                    breaker_token_ids.update(self.tokenizer.encode(breaker))
+            logits_processors.append(
+                make_dry_processor(
+                    sampling_params.dry_multiplier,
+                    sampling_params.dry_base,
+                    sampling_params.dry_allowed_length,
+                    breaker_token_ids,
+                )
+            )
 
         # Add thinking budget processor for reasoning models
         if (

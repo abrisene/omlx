@@ -100,6 +100,18 @@ class ModelSettingsRequest(BaseModel):
     top_k: Optional[int] = None
     repetition_penalty: Optional[float] = None
     min_p: Optional[float] = None
+    top_n_sigma: Optional[float] = None
+    min_k: Optional[int] = None
+    dynamic_temperature: Optional[bool] = None
+    dynatemp_low: Optional[float] = None
+    dynatemp_high: Optional[float] = None
+    dynatemp_exponent: Optional[float] = None
+    temperature_last: Optional[bool] = None
+    sampler_priority: Optional[List[str]] = None
+    dry_multiplier: Optional[float] = None
+    dry_base: Optional[float] = None
+    dry_allowed_length: Optional[int] = None
+    dry_sequence_breakers: Optional[List[str]] = None
     presence_penalty: Optional[float] = None
     force_sampling: Optional[bool] = None
     max_tool_result_tokens: Optional[int] = None
@@ -1363,6 +1375,18 @@ async def list_models(is_admin: bool = Depends(require_admin)):
                 "top_k": settings.top_k,
                 "repetition_penalty": settings.repetition_penalty,
                 "min_p": settings.min_p,
+                "top_n_sigma": settings.top_n_sigma,
+                "min_k": settings.min_k,
+                "dynamic_temperature": settings.dynamic_temperature,
+                "dynatemp_low": settings.dynatemp_low,
+                "dynatemp_high": settings.dynatemp_high,
+                "dynatemp_exponent": settings.dynatemp_exponent,
+                "temperature_last": settings.temperature_last,
+                "sampler_priority": settings.sampler_priority,
+                "dry_multiplier": settings.dry_multiplier,
+                "dry_base": settings.dry_base,
+                "dry_allowed_length": settings.dry_allowed_length,
+                "dry_sequence_breakers": settings.dry_sequence_breakers,
                 "presence_penalty": settings.presence_penalty,
                 "force_sampling": settings.force_sampling,
                 "max_tool_result_tokens": settings.max_tool_result_tokens,
@@ -1558,6 +1582,30 @@ async def update_model_settings(
         current_settings.repetition_penalty = request.repetition_penalty
     if "min_p" in sent:
         current_settings.min_p = request.min_p
+    if "top_n_sigma" in sent:
+        current_settings.top_n_sigma = request.top_n_sigma
+    if "min_k" in sent:
+        current_settings.min_k = request.min_k
+    if "dynamic_temperature" in sent:
+        current_settings.dynamic_temperature = request.dynamic_temperature
+    if "dynatemp_low" in sent:
+        current_settings.dynatemp_low = request.dynatemp_low
+    if "dynatemp_high" in sent:
+        current_settings.dynatemp_high = request.dynatemp_high
+    if "dynatemp_exponent" in sent:
+        current_settings.dynatemp_exponent = request.dynatemp_exponent
+    if "temperature_last" in sent:
+        current_settings.temperature_last = request.temperature_last
+    if "sampler_priority" in sent:
+        current_settings.sampler_priority = request.sampler_priority
+    if "dry_multiplier" in sent:
+        current_settings.dry_multiplier = request.dry_multiplier
+    if "dry_base" in sent:
+        current_settings.dry_base = request.dry_base
+    if "dry_allowed_length" in sent:
+        current_settings.dry_allowed_length = request.dry_allowed_length
+    if "dry_sequence_breakers" in sent:
+        current_settings.dry_sequence_breakers = request.dry_sequence_breakers
     if "presence_penalty" in sent:
         current_settings.presence_penalty = request.presence_penalty
     if "force_sampling" in sent:
