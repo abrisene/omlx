@@ -99,6 +99,58 @@ The following local capabilities were added and validated:
 - persistent `dflash_max_ctx`
 - persistent `prefill_batch_size`
 - persistent `prefill_step_size`
+- Qwen3.6 reasoning-aware requests now fall back off DFlash onto the standard VLM path
+- unterminated `<think>` blocks are now treated as reasoning content instead of plain visible text
+
+## Additional validation: reasoning extraction fix
+
+### Problem observed
+
+Qwen3.6 with `enable_thinking=true` often produced visible reasoning text in
+`content` while leaving `reasoning_content=null`, especially when the DFlash
+path was active or when the `<think>` block was not cleanly closed before the
+output budget ran out.
+
+### Fixes applied
+
+- DFlash now falls back to the standard VLM path for reasoning-aware requests
+- non-streaming thinking extraction now handles open `<think>` blocks with no
+  closing `</think>`
+- scheduler finalization preserves the synthetic open-think prefix when needed
+
+### Evidence
+
+#### Good case
+
+With:
+
+- `enable_thinking=true`
+- `preserve_thinking=true`
+- `thinking_budget=64`
+- `max_tokens=256`
+
+Observed:
+
+- `content = "4"`
+- `reasoning_content` contained the model's thinking text
+
+#### Tight-budget case
+
+With:
+
+- `thinking_budget=32`
+- `max_tokens=128`
+
+Observed:
+
+- `reasoning_content` was present
+- visible output still leaked some partial reasoning text
+
+Conclusion:
+
+- the extraction/pathing bug is fixed
+- but too-small `thinking_budget` / `max_tokens` can still produce awkward
+  partial outputs, so Qwen3.6 needs enough room to both think and answer cleanly
 
 These are now available through the rebuilt app and persisted in settings.
 
