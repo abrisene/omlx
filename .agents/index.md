@@ -26,6 +26,8 @@ Short manual routine:
 git fetch upstream
 git switch dev
 git rebase upstream/main
+cd packaging
+python3.11 build.py --skip-venv
 ```
 
 If you want to update the remote integration branch too:
@@ -34,18 +36,32 @@ If you want to update the remote integration branch too:
 git push --force-with-lease origin dev
 ```
 
+If dependency pins changed (`pyproject.toml`, `packaging/venvstacks.toml`, app-packaging inputs),
+do a full rebuild instead:
+
+```bash
+cd packaging
+python3.11 build.py
+```
+
 ## Helper script
 
 Use:
 
 ```bash
-./scripts/rebase-dev.sh
+./scripts/rebase-dev.sh --build
 ```
 
 Or to rebase and push:
 
 ```bash
-./scripts/rebase-dev.sh --push
+./scripts/rebase-dev.sh --build --push
+```
+
+For a full rebuild after rebasing:
+
+```bash
+./scripts/rebase-dev.sh --full-build
 ```
 
 ## Current intent
@@ -53,3 +69,5 @@ Or to rebase and push:
 - `dev` is the place where upstream changes and local DeepSeek / integration work should meet.
 - Keep `dev` healthy and current.
 - Archive older one-off integration branches instead of continuing to use them as the main landing branch.
+- When `dev` changes, build the latest app bundle so local testing stays on the
+  current integration state.
