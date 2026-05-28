@@ -26,8 +26,9 @@ Short manual routine:
 git fetch upstream
 git switch dev
 git rebase upstream/main
-cd packaging
-python3.11 build.py --skip-venv
+# Build the user-facing app (Swift bundle); auto-rebuilds the venvstacks
+# donor only when dependency fingerprints drifted:
+apps/omlx-mac/Scripts/build.sh release
 ```
 
 If you want to update the remote integration branch too:
@@ -36,12 +37,26 @@ If you want to update the remote integration branch too:
 git push --force-with-lease origin dev
 ```
 
-If dependency pins changed (`pyproject.toml`, `packaging/venvstacks.toml`, app-packaging inputs),
-do a full rebuild instead:
+> **Build flow changed (upstream a1ade10+, Swift rewrite).** The PyObjC menubar
+> app and the `build.py` `.app`/DMG pipeline are retired. `packaging/build.py`
+> now only produces the venvstacks Python layers — its single run mode is
+> `--venvstacks-only` (`--skip-venv` no longer exists). The macOS `oMLX.app`
+> is built by `apps/omlx-mac/Scripts/build.sh`, which fingerprints
+> `pyproject.toml` / `venvstacks.toml` / `uv.lock` and rebuilds the export
+> automatically when they drift. Note `packaging/venvstacks.toml` is now
+> auto-generated from `pyproject.toml` (`requirements = []`) — edit pins in
+> `pyproject.toml`, not by hand.
+
+To build just the Python layers (e.g. to refresh a dev venv after a dep bump):
 
 ```bash
-cd packaging
-python3.11 build.py
+python3.11 packaging/build.py --venvstacks-only
+```
+
+To force a fresh venvstacks rebuild plus the bundle:
+
+```bash
+apps/omlx-mac/Scripts/build.sh release --rebuild-donor
 ```
 
 ## Helper script
