@@ -248,6 +248,32 @@ Nothing unique is lost:
 
 Recovery: backup branch as above; cherry-pick `3ec7437` if the custom PR-pin path is
 ever needed again (expect heavy conflicts against upstream's deps + patches).
+
+---
+
+## Branch cleanup (2026-05-28)
+
+Deleted stale one-off local branches after the rebase. All content recoverable as noted.
+
+| Branch | Tip | Recoverable from |
+|---|---|---|
+| `archive/qwen36-phase-template-rebase-upstream-main-20260427` | `3e85f04` | `backup/dev-pre-rebase-20260528` + archive (Qwen3.6 work) |
+| `feature/new-samplers` | `26ea996` | `origin/feature/new-samplers` + backup |
+| `feature/new-samplers-integrated-snapshot-20260418-082933` | `9dc7286` | backup + archive |
+| `feature/qwen36-phase-template` | `7238677` | backup + archive |
+| `feature/template-phase-bias` | `616d066` | backup + archive |
+| `integration/local-patches` | `616d066` | `origin/integration/local-patches` |
+| `pr-814` | `ef7681c` | merged upstream (#814) |
+| `pr-876` | `bf59f4f` | backup (`bde04a0`); PR #876 closed upstream |
+| `pr-895` | `d2d64fb` | content in `dev` (hot_cache commits); PR #895 (`gh pr checkout 895`) |
+| `pr-960` | `77ab99f` | GitHub PR #960 (`gh pr checkout 960`) |
+| `pr-961` | `d7625a4` | GitHub PR #961 (`gh pr checkout 961`) |
+| `safety/qwen36-phase-template-pre-rebase-20260419-233758` | `7ea0f13` | backup + archive |
+
+Kept: `dev`, `main`, `backup/dev-pre-rebase-20260528`. Git reflog also retains these
+tips for ~90 days. Remote branches `origin/feature/new-samplers` and
+`origin/integration/local-patches` were left in place (delete with
+`git push origin --delete <name>` if desired).
 - Cherry-pick targets: sampler core `2418f10` (`omlx/sampling.py` + plumbing);
   phase-aware penalties + per-phase fields `efdebfe` (largest, most conflict-prone);
   phase-bias template `c97f950`; persistent prefill knobs `2cbe199`; docs `ab88d9b`,
