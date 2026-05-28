@@ -43,6 +43,11 @@ fi
 #   fingerprints drift.
 #   --build      -> rebuild the Swift bundle, reusing the existing export
 #   --full-build -> force a fresh venvstacks rebuild + bundle
+# build.sh defaults its venvstacks driver to `python3`, which on this machine
+# is 3.9 — too old for packaging/build.py (PEP 604 `X | None` annotations).
+# Prefer python3.11 so the donor build / fingerprint check actually work.
+export PYTHON_BIN="${PYTHON_BIN:-$(command -v python3.11 || command -v python3 || true)}"
+
 if [[ "$build_mode" == "skip-venv" ]]; then
   apps/omlx-mac/Scripts/build.sh release --no-rebuild-donor
 elif [[ "$build_mode" == "full" ]]; then

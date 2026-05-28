@@ -46,6 +46,12 @@ git push --force-with-lease origin dev
 > automatically when they drift. Note `packaging/venvstacks.toml` is now
 > auto-generated from `pyproject.toml` (`requirements = []`) — edit pins in
 > `pyproject.toml`, not by hand.
+>
+> **Use Python 3.11+ for the build.** `build.sh` drives `build.py` with
+> whatever `python3` resolves to; if that's the system 3.9 the donor build and
+> fingerprint check fail (`TypeError: unsupported operand type(s) for |`). Set
+> `PYTHON_BIN=$(command -v python3.11)` (the `rebase-dev.sh` helper does this
+> automatically).
 
 To build just the Python layers (e.g. to refresh a dev venv after a dep bump):
 
