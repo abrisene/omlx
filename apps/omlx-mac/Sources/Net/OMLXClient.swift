@@ -496,7 +496,7 @@ final class OMLXClient: ObservableObject {
     ) async throws -> T {
         var components = URLComponents()
         components.scheme = "http"
-        components.host = host
+        components.host = host.loopbackIfWildcard
         components.port = port
         components.path = path
         if !query.isEmpty { components.queryItems = query }
@@ -536,7 +536,7 @@ final class OMLXClient: ObservableObject {
         struct LoginReq: Encodable { let apiKey: String; let remember: Bool }
         var components = URLComponents()
         components.scheme = "http"
-        components.host = host
+        components.host = host.loopbackIfWildcard
         components.port = port
         components.path = "/admin/api/login"
         guard let url = components.url else { throw OMLXClientError.invalidURL }

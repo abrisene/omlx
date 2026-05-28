@@ -510,7 +510,7 @@ final class MenubarController: NSObject {
     }
 
     @objc private func openChat() {
-        guard let url = URL(string: "http://\(config.host):\(config.port)/admin/chat") else { return }
+        guard let url = URL(string: "http://\(config.host.loopbackIfWildcard):\(config.port)/admin/chat") else { return }
         NSWorkspace.shared.open(url)
     }
 

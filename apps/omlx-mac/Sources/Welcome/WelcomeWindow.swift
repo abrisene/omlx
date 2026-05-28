@@ -387,7 +387,7 @@ final class WelcomeViewModel: ObservableObject {
         guard ok, let services else { return ok }
         let port = services.config.port
         let host = services.config.host
-        guard let url = URL(string: "http://\(host):\(port)/admin/dashboard") else {
+        guard let url = URL(string: "http://\(host.loopbackIfWildcard):\(port)/admin/dashboard") else {
             return ok
         }
         NSWorkspace.shared.open(url)

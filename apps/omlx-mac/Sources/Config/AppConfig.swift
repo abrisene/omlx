@@ -24,6 +24,17 @@
 
 import Foundation
 
+extension String {
+    /// A wildcard bind address (`0.0.0.0` / `::`) tells the server which
+    /// interfaces to listen on — it is NOT a valid *connect* target, and
+    /// App Transport Security blocks cleartext HTTP to it. Map it to loopback
+    /// for client connections while leaving the stored bind host untouched, so
+    /// the server can still bind `0.0.0.0` for LAN access (e.g. Egregore.local).
+    var loopbackIfWildcard: String {
+        (self == "0.0.0.0" || self == "::" || isEmpty) ? "127.0.0.1" : self
+    }
+}
+
 struct AppConfig: Sendable, Equatable, Codable {
     var host: String
     var port: Int
@@ -60,7 +71,7 @@ struct AppConfig: Sendable, Equatable, Codable {
     }
 
     var baseURL: URL? {
-        URL(string: "http://\(host):\(port)")
+        URL(string: "http://\(host.loopbackIfWildcard):\(port)")
     }
 
     // MARK: - Path resolution

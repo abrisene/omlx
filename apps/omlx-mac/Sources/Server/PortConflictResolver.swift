@@ -9,7 +9,9 @@ struct PortConflictResolver: Sendable {
     let port: Int
 
     private var healthURL: URL {
-        URL(string: "http://\(host):\(port)/health")!
+        // Wildcard bind hosts (0.0.0.0/::) are not valid connect targets and are
+        // blocked by ATS over URLSession; probe loopback instead.
+        URL(string: "http://\(host.loopbackIfWildcard):\(port)/health")!
     }
 
     // MARK: - Sync probes (cheap; called from start() before spawn)
