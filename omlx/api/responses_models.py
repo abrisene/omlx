@@ -126,6 +126,8 @@ class ResponsesRequest(BaseModel):
     seed: Optional[int] = None
     # Chat template kwargs (e.g. enable_thinking, reasoning_effort)
     chat_template_kwargs: Optional[Dict[str, Any]] = None
+    # oMLX chat-owned generation policy (phase sampling and lexicon steering).
+    generation_policy: Optional[Dict[str, Any]] = None
 
     model_config = {"extra": "allow"}
 
