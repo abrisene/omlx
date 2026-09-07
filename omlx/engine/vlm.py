@@ -4941,6 +4941,63 @@ class VLMBatchedEngine(BaseEngine):
             first_token_at=output.first_token_at,
         )
 
+    async def capture_hidden_states(
+        self,
+        prompt: str | list[int],
+        layer_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        """Capture final-token language residuals from the resident model."""
+        if not self._loaded:
+            await self.start()
+        if self.model_type != QWEN4_EXP_MODEL_TYPE:
+            raise InvalidRequestError(
+                "Hidden-state capture is currently supported only for Qwen4-Exp."
+            )
+
+        token_ids = (
+            list(prompt)
+            if isinstance(prompt, list)
+            else list(self._tokenizer.encode(prompt))
+        )
+        if not token_ids:
+            raise InvalidRequestError("Prompt must contain at least one token.")
+
+        num_layers = len(self._adapter.layers)
+        selected = list(range(num_layers)) if layer_ids is None else list(layer_ids)
+        if not selected or len(set(selected)) != len(selected):
+            raise InvalidRequestError("layer_ids must be a non-empty unique list.")
+        if any(layer_id < 0 or layer_id >= num_layers for layer_id in selected):
+            raise InvalidRequestError(
+                f"layer_ids must be between 0 and {num_layers - 1}."
+            )
+
+        def _capture_sync():
+            self._adapter.clear_vlm_position_state()
+            inputs = mx.array([token_ids], dtype=mx.int32)
+            output = self._adapter._language_model(
+                inputs,
+                capture_layer_ids=selected,
+                skip_logits=True,
+            )
+            hidden_states = output.hidden_states or []
+            mx.eval(*hidden_states)
+            return [
+                state[:, -1:, :].astype(mx.float32).reshape(-1).tolist()
+                for state in hidden_states
+            ]
+
+        states = await asyncio.get_running_loop().run_in_executor(
+            self._engine._mlx_executor,
+            _capture_sync,
+        )
+        return {
+            "model": self._model_name,
+            "token_count": len(token_ids),
+            "layer_ids": selected,
+            "hidden_size": len(states[0]) if states else 0,
+            "hidden_states": states,
+        }
+
     async def stream_generate(
         self,
         prompt: str | list[int],

@@ -65,7 +65,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from omlx._version import __version__
 
@@ -261,6 +261,14 @@ class EngineType(Enum):
     EMBEDDING = "embedding"
     RERANKER = "reranker"
     DECISION = "decision"
+
+
+class HiddenStateCaptureRequest(BaseModel):
+    """Local research request for final-token language residuals."""
+
+    model: str
+    prompt: str
+    layer_ids: list[int] | None = Field(default=None)
 
 
 @dataclass
@@ -4448,6 +4456,30 @@ async def _decisions_body(
 # =============================================================================
 # Completion Endpoints
 # =============================================================================
+
+
+@app.post("/v1/research/hidden-states")
+async def capture_hidden_states(
+    request: HiddenStateCaptureRequest,
+    _: bool = Depends(verify_api_key),
+):
+    """Capture Qwen4-Exp residuals without loading a second model copy."""
+    lease = _LLMEngineLease()
+    try:
+        engine = await get_engine_for_model(request.model, lease=lease)
+        if not isinstance(engine, VLMBatchedEngine):
+            raise HTTPException(
+                status_code=400,
+                detail="Hidden-state capture requires a VLM-backed Qwen4-Exp model.",
+            )
+        return await engine.capture_hidden_states(
+            request.prompt,
+            layer_ids=request.layer_ids,
+        )
+    except InvalidRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        await lease.release()
 
 
 @app.post("/v1/completions")
