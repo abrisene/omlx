@@ -231,6 +231,40 @@ async def test_legacy_turboquant_bits_only_block_kv_changes():
 
 
 @pytest.mark.asyncio
+async def test_adapter_path_is_validated_and_persisted(tmp_path):
+    pool, entry = _failed_pool()
+    settings = ModelSettings()
+    adapter_dir = tmp_path / "adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}")
+    (adapter_dir / "adapters.safetensors").write_bytes(b"test")
+
+    await _update_settings(
+        pool,
+        settings,
+        admin_routes.ModelSettingsRequest(adapter_path=str(adapter_dir)),
+    )
+
+    assert settings.adapter_path == str(adapter_dir.resolve())
+    assert entry.load_failed is False
+
+
+@pytest.mark.asyncio
+async def test_adapter_path_rejects_incomplete_directory(tmp_path):
+    pool, _ = _failed_pool()
+    settings = ModelSettings()
+    adapter_dir = tmp_path / "adapter"
+    adapter_dir.mkdir()
+
+    with pytest.raises(admin_routes.HTTPException, match="Invalid MLX adapter"):
+        await _update_settings(
+            pool,
+            settings,
+            admin_routes.ModelSettingsRequest(adapter_path=str(adapter_dir)),
+        )
+
+
+@pytest.mark.asyncio
 async def test_qwen_ane_prefill_settings_are_persisted():
     pool, entry = _failed_pool()
     entry.config_model_type = "qwen3_5"

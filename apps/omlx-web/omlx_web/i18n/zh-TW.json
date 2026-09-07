@@ -1265,6 +1265,7 @@
   "settings.models.badge.force_sampling": "force_sampling",
   "modal.model_settings.section_label": "模型設定",
   "modal.model_settings.model_alias": "模型別名",
+  "modal.model_settings.adapter_path": "LoRA 轉接器",
   "modal.model_settings.model_alias_hint": "API 請求也可以使用此別名（而非模型名稱）呼叫此模型。",
   "modal.model_settings.model_type": "模型類型",
   "modal.model_settings.reasoning_parser": "推理解析器",

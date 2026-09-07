@@ -322,19 +322,18 @@ class BatchedEngine(BaseEngine):
                 model, processor = custom_loaded
                 return model, getattr(processor, "tokenizer", processor)
 
-            return lm_load_compat(
-                self._model_name,
-                tokenizer_config=tokenizer_config,
-                trust_remote_code=self._trust_remote_code,
+            load_kwargs = {
+                "tokenizer_config": tokenizer_config,
+                "trust_remote_code": self._trust_remote_code,
                 **_mtp_sidecar_load_kwargs(self._model_name),
-                # With expert offload the load stays lazy so the wrap below
-                # can drop non-resident expert tensors BEFORE anything
-                # materializes them; materialize_lazy_state then evaluates
-                # what remains. Without offload, load eagerly as before.
-                lazy=bool(
+                "lazy": bool(
                     getattr(self._model_settings, "moe_expert_offload_enabled", False)
                 ),
-            )
+            }
+            adapter_path = getattr(self._model_settings, "adapter_path", None)
+            if adapter_path:
+                load_kwargs["adapter_path"] = adapter_path
+            return lm_load_compat(self._model_name, **load_kwargs)
 
         loop = asyncio.get_running_loop()
         self._model, self._tokenizer = await loop.run_in_executor(

@@ -352,6 +352,7 @@ class ModelSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model_alias: str | None = None
+    adapter_path: str | None = None
     model_type_override: str | None = None
     max_context_window: int | None = None
     max_tokens: int | None = None
@@ -2829,6 +2830,22 @@ async def update_model_settings(
                 engine_pool=engine_pool,
             )
         current_settings.model_alias = alias_value
+    if "adapter_path" in sent:
+        adapter_value = request.adapter_path.strip() if request.adapter_path else None
+        if adapter_value:
+            adapter_dir = Path(adapter_value).expanduser()
+            required_files = (
+                adapter_dir / "adapter_config.json",
+                adapter_dir / "adapters.safetensors",
+            )
+            missing = [str(path) for path in required_files if not path.is_file()]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid MLX adapter directory; missing: {', '.join(missing)}",
+                )
+            adapter_value = str(adapter_dir.resolve())
+        current_settings.adapter_path = adapter_value
     if "model_type_override" in sent:
         valid_types = {
             "llm",
@@ -2869,8 +2886,6 @@ async def update_model_settings(
             entry.engine_type = type_to_engine.get(override_value, "batched")
         else:
             # Reset to auto-detected type
-            from pathlib import Path
-
             from ..model_discovery import detect_model_type
 
             detected_type = detect_model_type(Path(entry.model_path))
@@ -3219,7 +3234,6 @@ async def update_model_settings(
             # mlx-community converted weights where the default sanitize
             # path stripped the MTP heads.
             import json
-            from pathlib import Path
 
             from ..utils.model_loading import (
                 _checkpoint_has_mtp_weights,

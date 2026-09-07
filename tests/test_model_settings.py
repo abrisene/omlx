@@ -107,6 +107,11 @@ class TestModelSettings:
         d = settings.to_dict()
         assert d["max_context_window"] == 4096
 
+    def test_adapter_path_roundtrip(self):
+        original = ModelSettings(adapter_path="/tmp/qwen38-heretic")
+        restored = ModelSettings.from_dict(original.to_dict())
+        assert restored.adapter_path == "/tmp/qwen38-heretic"
+
     def test_to_dict_excludes_none(self):
         """Test to_dict excludes None values."""
         settings = ModelSettings(temperature=0.7, is_pinned=True)

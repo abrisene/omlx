@@ -152,6 +152,16 @@ def test_model_settings_feature_labels_use_i18n_keys():
     assert ">DFlash</span>" not in modal_html
 
 
+def test_adapter_path_is_loaded_and_saved_by_model_settings_ui():
+    html = _model_settings_template()
+    script = _dashboard_script()
+
+    assert "{{ t('modal.model_settings.adapter_path') }}" in html
+    assert 'x-model="modelSettings.adapter_path"' in html
+    assert "adapter_path: s.adapter_path || ''" in script
+    assert "adapter_path: ms.is_diffusion_model" in script
+
+
 def test_dflash_ui_omits_settings_removed_from_the_admin_api():
     """The settings API forbids unknown fields, so a stale key fails every save."""
     html = _model_settings_template()
@@ -174,6 +184,7 @@ def test_model_settings_feature_i18n_keys_exist_in_every_locale():
     root = Path(__file__).resolve().parents[1]
     i18n_dir = root / "omlx_web/i18n"
     keys = {
+        "modal.model_settings.adapter_path",
         "modal.model_settings.reasoning_parser",
         "modal.model_settings.specprefill",
         "modal.model_settings.dflash",

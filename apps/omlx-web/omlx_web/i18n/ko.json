@@ -1265,6 +1265,7 @@
   "settings.models.badge.force_sampling": "force_sampling",
   "modal.model_settings.section_label": "모델 설정",
   "modal.model_settings.model_alias": "모델 별칭",
+  "modal.model_settings.adapter_path": "LoRA 어댑터",
   "modal.model_settings.model_alias_hint": "모델 이름 대신 이 별칭으로도 API에서 모델을 호출할 수 있습니다.",
   "modal.model_settings.model_type": "모델 타입",
   "modal.model_settings.reasoning_parser": "추론 파서",

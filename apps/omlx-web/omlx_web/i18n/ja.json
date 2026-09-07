@@ -1265,6 +1265,7 @@
   "settings.models.badge.force_sampling": "force_sampling",
   "modal.model_settings.section_label": "モデル設定",
   "modal.model_settings.model_alias": "モデルエイリアス",
+  "modal.model_settings.adapter_path": "LoRAアダプター",
   "modal.model_settings.model_alias_hint": "API リクエストでは、モデル名の代わりにこのエイリアスでもモデルを呼び出せます。",
   "modal.model_settings.model_type": "モデルタイプ",
   "modal.model_settings.reasoning_parser": "推論パーサー",

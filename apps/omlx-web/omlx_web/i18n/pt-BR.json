@@ -1265,6 +1265,7 @@
   "settings.models.badge.force_sampling": "force_sampling",
   "modal.model_settings.section_label": "Configurações do Modelo",
   "modal.model_settings.model_alias": "Apelido do Modelo",
+  "modal.model_settings.adapter_path": "Adaptador LoRA",
   "modal.model_settings.model_alias_hint": "Requisições da API também podem chamar este modelo pelo alias em vez do nome do modelo.",
   "modal.model_settings.model_type": "Tipo do Modelo",
   "modal.model_settings.reasoning_parser": "Analisador de raciocínio",

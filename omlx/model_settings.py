@@ -247,6 +247,7 @@ class ModelSettings:
         model_type_override: "llm", "vlm", "embedding", "reranker", "decision",
             or None (auto-detect).
         model_alias: API-visible alternative to the directory name.
+        adapter_path: Local MLX LoRA adapter directory loaded with the model.
         index_cache_freq: IndexCache: every Nth layer keeps indexer (DeepSeek DSA
             only; GLM-5.2 uses its native checkpoint schedule).
         enable_thinking: Explicit toggle for thinking/reasoning mode (None = auto).
@@ -369,6 +370,9 @@ class ModelSettings:
     )
     model_alias: Optional[str] = (
         None  # API-visible name (alternative to directory name)
+    )
+    adapter_path: Optional[str] = (
+        None  # Local directory containing adapter_config.json and adapters.safetensors
     )
     index_cache_freq: Optional[int] = (
         None  # IndexCache: every Nth layer keeps indexer (DeepSeek DSA only)

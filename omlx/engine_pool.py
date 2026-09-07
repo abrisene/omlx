@@ -1161,6 +1161,7 @@ class EnginePool:
         add("embedding_audio_enabled", audio_active)
         if audio_active:
             add("embedding_audio_max_seconds", data.get("embedding_audio_max_seconds"))
+        add("adapter_path", data.get("adapter_path") or None)
 
         # Load-time model variants. Dependent fields only matter when their
         # feature is active; stale draft paths or tuning defaults must not

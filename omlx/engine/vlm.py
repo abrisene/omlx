@@ -2192,6 +2192,11 @@ class VLMBatchedEngine(BaseEngine):
                     load_kwargs = {
                         "trust_remote_code": self._trust_remote_code,
                     }
+                    adapter_path = getattr(
+                        self._model_settings, "adapter_path", None
+                    )
+                    if adapter_path:
+                        load_kwargs["adapter_path"] = adapter_path
                     if model_type == QWEN4_EXP_MODEL_TYPE:
                         load_kwargs["lazy"] = True
                     # Expert offload wraps BEFORE materialization so non-resident
@@ -2206,6 +2211,22 @@ class VLMBatchedEngine(BaseEngine):
                         self._model_name,
                         **load_kwargs,
                     )
+                    if adapter_path:
+                        loaded_model = loaded[0]
+                        lora_modules = [
+                            name
+                            for name, module in loaded_model.named_modules()
+                            if type(module).__name__.startswith("LoRA")
+                        ]
+                        if not lora_modules:
+                            raise RuntimeError(
+                                f"Adapter {adapter_path} loaded no LoRA modules"
+                            )
+                        logger.info(
+                            "Loaded MLX LoRA adapter %s on %d modules",
+                            adapter_path,
+                            len(lora_modules),
+                        )
                     return loaded
 
         loop = asyncio.get_running_loop()
