@@ -1778,6 +1778,25 @@
                             <div class="message-body markdown-content" data-math-pending="true"
                                 :data-math-version="typeof msg.content === 'string' ? String(msg.content.length) : '0'"
                                 x-html="renderMarkdown(msg.content)"></div>
+                            <button x-show="msg.meta?.usage?.prompt_tokens != null"
+                                @click="msg._usageVisible = !msg._usageVisible"
+                                class="mx-3 mb-2 flex items-center gap-1.5 text-caption font-mono hover:underline"
+                                style="color: var(--text-tertiary);">
+                                <span x-text="formatResponseUsageSummary(msg.meta?.usage)"></span>
+                                <i data-lucide="chevron-down" class="w-3 h-3"
+                                    :style="msg._usageVisible ? 'transform:rotate(180deg)' : ''"></i>
+                            </button>
+                            <div x-show="msg._usageVisible && msg.meta?.usage" x-cloak
+                                class="mx-3 mb-3 grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-line bg-surface-muted px-3 py-2 text-caption font-mono"
+                                style="color: var(--text-secondary);">
+                                <span>Prompt</span><span class="text-right" x-text="Number(msg.meta.usage.prompt_tokens || 0).toLocaleString()"></span>
+                                <span>Cached</span><span class="text-right" x-text="cachedPromptTokens(msg.meta.usage).toLocaleString()"></span>
+                                <span>Evaluated</span><span class="text-right" x-text="evaluatedPromptTokens(msg.meta.usage).toLocaleString()"></span>
+                                <span>Generated</span><span class="text-right" x-text="Number(msg.meta.usage.completion_tokens || 0).toLocaleString()"></span>
+                                <template x-if="msg.meta.usage.generation_tokens_per_second != null">
+                                    <span class="contents"><span>Generation</span><span class="text-right" x-text="Number(msg.meta.usage.generation_tokens_per_second).toFixed(1) + ' tok/s'"></span></span>
+                                </template>
+                            </div>
                         </div>
                     </div>
                 </template>
@@ -2486,6 +2505,273 @@
                 </div>
             </div>
 
+            <!-- ==================== MODEL TAB ==================== -->
+            <div x-show="rightSidebarTab === 'settings'" class="px-4 py-3 space-y-3">
+
+                <!-- Generation presets are chat-owned and travel across models. -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">Generation preset</label>
+                        <span x-show="generationPresetDirty" class="text-caption"
+                            style="color: var(--timeline-accent);">Modified</span>
+                    </div>
+                    <div class="relative">
+                        <select :value="activeGenerationPreset"
+                            @change="selectGenerationPreset($event.target.value)"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl font-medium cursor-pointer appearance-none focus:outline-none focus:border-line-strong bg-surface-muted hover:bg-surface-alt"
+                            style="color: var(--text-primary);">
+                            <template x-for="preset in generationPresets" :key="preset.name">
+                                <option :value="preset.name" x-text="preset.name"></option>
+                            </template>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style="color: var(--text-tertiary);"></i>
+                    </div>
+                    <div class="flex gap-1.5">
+                        <button @click="saveGenerationPreset()"
+                            :disabled="!generationPresetDirty"
+                            class="flex-1 px-2.5 py-1.5 text-caption font-medium rounded-lg border border-line disabled:opacity-40 bg-surface-muted hover:bg-surface-alt">
+                            Save
+                        </button>
+                        <button @click="saveGenerationPresetAs()"
+                            class="flex-1 px-2.5 py-1.5 text-caption font-medium rounded-lg border border-line bg-surface-muted hover:bg-surface-alt">
+                            Save as…
+                        </button>
+                        <button x-show="!generationPresets.find(p => p.name === activeGenerationPreset)?.builtin"
+                            @click="deleteGenerationPreset()"
+                            class="px-2.5 py-1.5 text-caption font-medium rounded-lg border border-line hover:bg-danger-bg"
+                            style="color: var(--text-danger);">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Profile selector (shared with PROFILE tab) -->
+                <div class="space-y-1">
+                    <div class="flex items-center gap-1.5 mb-1">
+                        <i data-lucide="user" class="w-3 h-3" style="color: var(--text-secondary);"></i>
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('chat.active_profile') }}</label>
+                    </div>
+                    <div class="relative">
+                        <select
+                            :value="activePromptProfile || ''"
+                            @change="selectPromptProfile($event.target.value || null)"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl font-medium cursor-pointer appearance-none focus:outline-none focus:border-line-strong transition-colors bg-surface-muted hover:bg-surface-alt"
+                            style="color: var(--text-primary);">
+                            <template x-for="p in promptProfiles" :key="p.name">
+                                <option :value="p.name" x-text="p.name"></option>
+                            </template>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style="color: var(--text-tertiary);"></i>
+                    </div>
+                </div>
+
+                <!-- Active Model Selector -->
+                <div class="space-y-1">
+                    <label class="text-caption font-bold uppercase tracking-wider block"
+                        style="color: var(--text-secondary);">{{ t('chat.active_model') }}</label>
+                    <div class="relative">
+                        <select x-model="currentModel"
+                            @change="selectModel($event.target.value)"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl font-medium cursor-pointer appearance-none focus:outline-none focus:border-line-strong transition-colors bg-surface-muted hover:bg-surface-alt"
+                            style="color: var(--text-primary);">
+                            <template x-for="model in availableModels" :key="model.id">
+                                <option :value="model.id" x-text="model.name"></option>
+                            </template>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style="color: var(--text-tertiary);"></i>
+                    </div>
+                    <div x-show="availableModels.length === 0">
+                        {{ t('chat.no_models') }}
+                    </div>
+                </div>
+
+                <!-- Temperature & Max Tokens -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.temperature') }}</label>
+                        <input type="number" x-model.number="modelSettings.temperature" @input="onModelSettingsChange()"
+                            step="0.1" min="0" max="2" placeholder="{{ t('modal.model_settings.placeholder_default') }}"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.max_tokens') }}</label>
+                        <input type="number" x-model.number="modelSettings.max_tokens" @input="onModelSettingsChange()"
+                            min="1" placeholder="{{ t('modal.model_settings.placeholder_default') }}"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                </div>
+
+                <!-- Sampling Advanced parameters: Top P, Top K, Min P -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.top_p') }}</label>
+                        <input type="number" x-model.number="modelSettings.top_p" @input="onModelSettingsChange()"
+                            step="0.05" min="0" max="1" placeholder="—"
+                            class="w-full px-2 py-2 text-xs border border-line rounded-xl text-center focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.top_k') }}</label>
+                        <input type="number" x-model.number="modelSettings.top_k" @input="onModelSettingsChange()" min="0"
+                            placeholder="—"
+                            class="w-full px-2 py-2 text-xs border border-line rounded-xl text-center focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.min_p') }}</label>
+                        <input type="number" x-model.number="modelSettings.min_p" @input="onModelSettingsChange()"
+                            step="0.01" min="0" max="1" placeholder="—"
+                            class="w-full px-2 py-2 text-xs border border-line rounded-xl text-center focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                </div>
+
+                <!-- Repetition Penalty & Presence Penalty -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.repetition_penalty_short') }}</label>
+                        <input type="number" x-model.number="modelSettings.repetition_penalty"
+                            @input="onModelSettingsChange()" step="0.05" min="0" placeholder="{{ t('modal.model_settings.placeholder_default') }}"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">{{ t('modal.model_settings.presence_penalty') }}</label>
+                        <input type="number" x-model.number="modelSettings.presence_penalty"
+                            @input="onModelSettingsChange()" step="0.05" min="-2" max="2" placeholder="{{ t('modal.model_settings.placeholder_default') }}"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl focus:outline-none focus:border-line-strong bg-surface-muted"
+                            style="color: var(--text-primary);">
+                    </div>
+                </div>
+
+                <!-- Thinking: Auto / On (Unlimit) / On (Limit) / Off -->
+                <div class="p-3 bg-surface-muted rounded-xl border border-line space-y-2">
+                    <label class="text-caption font-bold uppercase tracking-wider block"
+                        style="color: var(--text-secondary);">{{ t('chat.thinking_label') }}</label>
+                    <select :value="thinkingModeValue()" @change="setThinkingMode($event.target.value)"
+                        class="w-full px-3 py-2 text-xs border border-line rounded-xl bg-surface"
+                        style="color: var(--text-primary);">
+                        <option value="auto" :disabled="!thinkingModes().includes('auto')">{{ t('chat.thinking_mode.auto') }}</option>
+                        <option value="on_unlimit" :disabled="!thinkingModes().includes('on_unlimit')">{{ t('chat.thinking_mode.on_unlimited') }}</option>
+                        <option value="on_limit" :disabled="!thinkingModes().includes('on_limit')">{{ t('chat.thinking_mode.on_limited') }}</option>
+                        <option value="off" :disabled="!thinkingModes().includes('off')">{{ t('chat.thinking_mode.off') }}</option>
+                    </select>
+                    <p x-show="currentModelInfo()?.thinking_forced" class="text-caption" style="color: var(--text-tertiary);">{{ t('modal.model_settings.k2_thinking_hint') }}</p>
+                    <div x-show="thinkingModeValue() === 'on_limit'" x-collapse class="space-y-1">
+                        <label class="text-caption font-bold uppercase tracking-wider block"
+                            style="color: var(--text-secondary);">{{ t('chat.thinking_tokens') }}</label>
+                        <input type="number"
+                            :value="modelSettings.thinking_budget_tokens ?? ''"
+                            @keydown.arrow-up.prevent="stepThinkingBudgetTokens(1)"
+                            @keydown.arrow-down.prevent="stepThinkingBudgetTokens(-1)"
+                            @input="onThinkingBudgetTokensInput($event)"
+                            @change="clampThinkingBudgetTokens()"
+                            placeholder="4096" min="0" step="1024"
+                            class="w-full px-3 py-2 text-xs border border-line rounded-xl bg-surface thinking-budget-input"
+                            style="color: var(--text-primary);">
+                    </div>
+                    <label class="flex items-center justify-between gap-3 pt-1">
+                        <span class="text-xs" style="color: var(--text-primary);">Preserve prior thinking</span>
+                        <input type="checkbox"
+                            :checked="modelSettings.preserve_thinking === true"
+                            @change="modelSettings.preserve_thinking = $event.target.checked; onModelSettingsChange()"
+                            class="h-4 w-4 rounded border-line">
+                    </label>
+                    <p class="text-caption" style="color: var(--text-tertiary);">
+                        {{ t('chat.model_settings_advanced_hint') }}
+                    </p>
+                </div>
+
+                <div class="p-3 bg-surface-muted rounded-xl border border-line space-y-2">
+                    <label class="flex items-center justify-between gap-3">
+                        <span class="text-caption font-bold uppercase tracking-wider"
+                            style="color: var(--text-secondary);">Phase sampling</span>
+                        <input type="checkbox" x-model="modelSettings.generation_policy_enabled"
+                            @change="onModelSettingsChange()"
+                            class="h-4 w-4 rounded border-line">
+                    </label>
+                    <div x-show="modelSettings.generation_policy_enabled" x-collapse class="space-y-3">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1">
+                                <label class="text-caption font-bold uppercase tracking-wider"
+                                    style="color: var(--text-tertiary);">Thinking preset</label>
+                                <select x-model="modelSettings.reasoning_preset"
+                                    @change="onModelSettingsChange()"
+                                    class="w-full min-w-0 px-2 py-1.5 text-caption border border-line rounded-lg bg-surface">
+                                    <option value="">Base settings</option>
+                                    <template x-for="preset in generationPresets" :key="`thinking_${preset.name}`">
+                                        <option :value="preset.name" x-text="preset.name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-caption font-bold uppercase tracking-wider"
+                                    style="color: var(--text-tertiary);">Answer preset</label>
+                                <select x-model="modelSettings.response_preset"
+                                    @change="onModelSettingsChange()"
+                                    class="w-full min-w-0 px-2 py-1.5 text-caption border border-line rounded-lg bg-surface">
+                                    <option value="">Base settings</option>
+                                    <template x-for="preset in generationPresets" :key="`answer_${preset.name}`">
+                                        <option :value="preset.name" x-text="preset.name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-[auto_repeat(4,minmax(0,1fr))] gap-1.5 items-center">
+                            <span></span>
+                            <span class="text-caption text-center" style="color: var(--text-tertiary);">Temp</span>
+                            <span class="text-caption text-center" style="color: var(--text-tertiary);">Top P</span>
+                            <span class="text-caption text-center" style="color: var(--text-tertiary);">Top K</span>
+                            <span class="text-caption text-center" style="color: var(--text-tertiary);">Min P</span>
+                            <span class="text-caption font-medium" style="color: var(--text-secondary);">Think</span>
+                            <template x-for="key in ['temperature', 'top_p', 'top_k', 'min_p']" :key="`reasoning_${key}`">
+                                <input type="number" x-model.number="modelSettings[`reasoning_${key}`]"
+                                    @input="onModelSettingsChange()" step="0.05" placeholder="—"
+                                    class="min-w-0 px-1 py-1.5 text-caption text-center border border-line rounded-lg bg-surface">
+                            </template>
+                            <span class="text-caption font-medium" style="color: var(--text-secondary);">Answer</span>
+                            <template x-for="key in ['temperature', 'top_p', 'top_k', 'min_p']" :key="`response_${key}`">
+                                <input type="number" x-model.number="modelSettings[`response_${key}`]"
+                                    @input="onModelSettingsChange()" step="0.05" placeholder="—"
+                                    class="min-w-0 px-1 py-1.5 text-caption text-center border border-line rounded-lg bg-surface">
+                            </template>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-caption font-bold uppercase tracking-wider"
+                                style="color: var(--text-secondary);">Lexicon steering</label>
+                            <textarea x-model="modelSettings.lexicon_text" @input="onModelSettingsChange()"
+                                rows="4" placeholder="+ both: desired phrase&#10;- reasoning: distracting phrase&#10;! response: forbidden phrase"
+                                class="w-full px-2.5 py-2 text-caption font-mono border border-line rounded-xl bg-surface resize-y focus:outline-none focus:border-line-strong"></textarea>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-caption font-bold uppercase tracking-wider"
+                                style="color: var(--text-secondary);">Transactional rewrites</label>
+                            <textarea x-model="modelSettings.rewrite_text" @input="onModelSettingsChange()"
+                                rows="3" placeholder="response: /(Crown Princess)(?: \1)+/i => $1"
+                                class="w-full px-2.5 py-2 text-caption font-mono border border-line rounded-xl bg-surface resize-y focus:outline-none focus:border-line-strong"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
             <!-- ==================== SETTINGS TAB ==================== -->
             <div x-show="rightSidebarTab === 'chat'" class="px-4 py-3 space-y-3">
 
@@ -2929,6 +3215,12 @@
             newProfileNameDraft: '',
             profileDeleteConfirm: null,
 
+            // Chat-owned generation presets. Presets intentionally live in the
+            // browser/chat layer rather than mutating per-model administration.
+            generationPresets: [],
+            activeGenerationPreset: 'Model recommended',
+            generationPresetDirty: false,
+
             // MODEL SETTINGS Section State (shared prompt profiles from PROFILE tab)
             TOOL_TIMEOUT_MS: 30000,      // Per-tool execution timeout (ms)
 
@@ -2978,8 +3270,22 @@
                 presence_penalty: null,
                 enable_thinking: null,
                 reasoning_effort: null,
+                preserve_thinking: null,
                 thinking_budget_enabled: false,
                 thinking_budget_tokens: null,
+                generation_policy_enabled: false,
+                reasoning_preset: '',
+                reasoning_temperature: null,
+                reasoning_top_p: null,
+                reasoning_top_k: null,
+                reasoning_min_p: null,
+                response_preset: '',
+                response_temperature: null,
+                response_top_p: null,
+                response_top_k: null,
+                response_min_p: null,
+                lexicon_text: '',
+                rewrite_text: '',
             },
 
             defaultModelSettings() {
@@ -2993,8 +3299,22 @@
                     presence_penalty: null,
                     enable_thinking: null,
                     reasoning_effort: null,
+                    preserve_thinking: null,
                     thinking_budget_enabled: false,
                     thinking_budget_tokens: null,
+                    generation_policy_enabled: false,
+                    reasoning_preset: '',
+                    reasoning_temperature: null,
+                    reasoning_top_p: null,
+                    reasoning_top_k: null,
+                    reasoning_min_p: null,
+                    response_preset: '',
+                    response_temperature: null,
+                    response_top_p: null,
+                    response_top_k: null,
+                    response_min_p: null,
+                    lexicon_text: '',
+                    rewrite_text: '',
                 };
             },
 
@@ -3182,6 +3502,8 @@
             applySessionModelSettings(session) {
                 if (!session?.modelSettings) return false;
                 this.modelSettings = { ...this.defaultModelSettings(), ...this.cloneData(session.modelSettings) };
+                this.activeGenerationPreset = session.activeGenerationPreset || 'Model recommended';
+                this.generationPresetDirty = false;
                 if (this.modelSettings.thinking_budget_enabled) {
                     this.modelSettings.thinking_budget_tokens = this.normalizeThinkingBudgetTokens(
                         this.modelSettings.thinking_budget_tokens
@@ -3197,6 +3519,7 @@
                 if (!session) return;
                 const snap = this.captureSessionModelSettings();
                 session.modelSettings = snap.modelSettings;
+                session.activeGenerationPreset = this.activeGenerationPreset;
                 session.speculativeEngine = snap.speculativeEngine;
                 session.speculativeDraftModel = snap.speculativeDraftModel;
                 if (session.model) {
@@ -3221,6 +3544,7 @@
                     model: session.model ?? this.chatHistory[existingIndex].model,
                     systemPrompt: session.systemPrompt ?? this.chatHistory[existingIndex].systemPrompt,
                     activeProfile: session.activeProfile ?? this.chatHistory[existingIndex].activeProfile,
+                    activeGenerationPreset: session.activeGenerationPreset ?? this.activeGenerationPreset,
                     modelSettings: snap.modelSettings,
                     speculativeEngine: snap.speculativeEngine,
                     speculativeDraftModel: snap.speculativeDraftModel,
@@ -3658,7 +3982,14 @@
                         session.model = gatewayId;
                     }
                     if (meta.generation && Object.keys(meta.generation).length > 0) {
-                        this.applyGenerationSnapshot(meta.generation);
+                        if (meta.generationPresetSettings) {
+                            this.modelSettings = {
+                                ...this.defaultModelSettings(),
+                                ...this.cloneData(meta.generationPresetSettings),
+                            };
+                        } else {
+                            this.applyGenerationSnapshot(meta.generation);
+                        }
                     } else if (meta.modelId) {
                         const gatewayId = this.resolveGatewayModelId(meta.modelId);
                         await this.loadAdminModelDefaults(gatewayId);
@@ -3674,6 +4005,13 @@
                     const custom = this.samplingFields().some(({ key }) => meta.generation[key] != null);
                     this.activePromptProfile = custom ? null : 'System Default';
                     session.activeProfile = this.activePromptProfile;
+                }
+                if (meta.generationPresetName) {
+                    this.activeGenerationPreset = this.generationPresets.some(
+                        p => p.name === meta.generationPresetName
+                    ) ? meta.generationPresetName : 'Model recommended';
+                    session.activeGenerationPreset = this.activeGenerationPreset;
+                    this.generationPresetDirty = false;
                 }
                 if (meta.systemPrompt != null && String(meta.systemPrompt).trim()) {
                     this.systemPrompt = String(meta.systemPrompt).trim();
@@ -3782,7 +4120,94 @@
                 if (s.reasoning_effort && levels.includes(s.reasoning_effort)) {
                     gen.reasoning_effort = s.reasoning_effort;
                 }
+                if (s.preserve_thinking !== null) {
+                    gen.chat_template_kwargs = {
+                        ...(gen.chat_template_kwargs || {}),
+                        preserve_thinking: s.preserve_thinking === true,
+                    };
+                }
+                const generationPolicy = this.buildGenerationPolicy();
+                if (generationPolicy) gen.generation_policy = generationPolicy;
                 return Object.keys(gen).length ? gen : null;
+            },
+
+            parseLexiconPolicy(text) {
+                return String(text || '').split('\n').map(line => line.trim())
+                    .filter(Boolean)
+                    .map(line => {
+                        const marker = line[0];
+                        const modes = { '+': 'prefer', '-': 'avoid', '!': 'forbid' };
+                        const mode = modes[marker] || 'prefer';
+                        const body = modes[marker] ? line.slice(1).trim() : line;
+                        const phaseMatch = body.match(/^(reasoning|response|both)\s*:\s*/i);
+                        const phase = phaseMatch ? phaseMatch[1].toLowerCase() : 'both';
+                        const text = phaseMatch ? body.slice(phaseMatch[0].length).trim() : body;
+                        return text ? { text, mode, phase, strength: 2.0 } : null;
+                    }).filter(Boolean);
+            },
+
+            parseRewritePolicy(text) {
+                return String(text || '').split('\n').map(line => line.trim())
+                    .filter(Boolean)
+                    .map(line => {
+                        const separator = line.indexOf('=>');
+                        if (separator < 0) return null;
+                        let left = line.slice(0, separator).trim();
+                        const replacement = line.slice(separator + 2).trim();
+                        const phaseMatch = left.match(/^(reasoning|response|both)\s*:\s*/i);
+                        const phase = phaseMatch ? phaseMatch[1].toLowerCase() : 'response';
+                        if (phaseMatch) left = left.slice(phaseMatch[0].length).trim();
+                        let pattern = left;
+                        let flags = '';
+                        if (left.startsWith('/')) {
+                            const closing = left.lastIndexOf('/');
+                            if (closing > 0) {
+                                pattern = left.slice(1, closing);
+                                flags = left.slice(closing + 1);
+                            }
+                        }
+                        return pattern ? { pattern, replacement, flags, phase } : null;
+                    }).filter(Boolean);
+            },
+
+            phasePresetSettings(name) {
+                const preset = this.generationPresets.find(p => p.name === name);
+                if (!preset?.settings) return {};
+                const result = {};
+                for (const key of [
+                    'temperature', 'top_p', 'top_k', 'min_p',
+                    'repetition_penalty', 'presence_penalty'
+                ]) {
+                    if (preset.settings[key] != null) result[key] = preset.settings[key];
+                }
+                return result;
+            },
+
+            buildGenerationPolicy() {
+                const s = this.modelSettings;
+                if (!s.generation_policy_enabled) return null;
+                const phase = prefix => {
+                    const result = {
+                        ...this.phasePresetSettings(s[`${prefix}_preset`]),
+                    };
+                    for (const key of ['temperature', 'top_p', 'top_k', 'min_p']) {
+                        const value = s[`${prefix}_${key}`];
+                        if (value !== null && value !== '') result[key] = Number(value);
+                    }
+                    return Object.keys(result).length ? result : null;
+                };
+                const policy = {
+                    enabled: true,
+                    reasoning: phase('reasoning'),
+                    response: phase('response'),
+                    lexicon: this.parseLexiconPolicy(s.lexicon_text),
+                    rewrites: this.parseRewritePolicy(s.rewrite_text),
+                };
+                if (!policy.reasoning) delete policy.reasoning;
+                if (!policy.response) delete policy.response;
+                if (!policy.lexicon.length) delete policy.lexicon;
+                if (!policy.rewrites.length) delete policy.rewrites;
+                return policy;
             },
 
             captureGenerationContext(modelId, systemPrompt, profile, generationOverride = null) {
@@ -3799,6 +4224,8 @@
                     modelId: gatewayId,
                     modelDisplay: displayModel?.name || modelId || gatewayId,
                     profileName,
+                    generationPresetName: this.activeGenerationPreset,
+                    generationPresetSettings: this.cloneData(this.modelSettings),
                     systemPrompt: systemPrompt ?? '',
                     generation: Object.keys(generation).length ? generation : null,
                     capturedAt: new Date().toISOString(),
@@ -4127,6 +4554,10 @@
                             ? this.systemPrompt
                             : (localStorage.getItem(SYSTEM_PROMPT_STORAGE_KEY) || '')),
                         activeProfile: historyChat?.activeProfile ?? null,
+                        activeGenerationPreset: historyChat?.activeGenerationPreset
+                            ?? (this.currentChatId === chatId
+                                ? this.activeGenerationPreset
+                                : 'Model recommended'),
                         modelSettings: historyChat?.modelSettings
                             ? this.cloneData(historyChat.modelSettings) : null,
                         speculativeEngine: historyChat?.speculativeEngine ?? null,
@@ -4179,7 +4610,33 @@
                     prompt_tokens: usage.prompt_tokens ?? 0,
                     thinking_tokens: stream?._thinkTokens || 0,
                     total_tokens: usage.completion_tokens ?? 0,
+                    cached_tokens: this.cachedPromptTokens(usage),
                 };
+            },
+
+            cachedPromptTokens(usage) {
+                return Number(
+                    usage?.prompt_tokens_details?.cached_tokens
+                    ?? usage?.cached_tokens
+                    ?? 0
+                ) || 0;
+            },
+
+            evaluatedPromptTokens(usage) {
+                return Math.max(
+                    0,
+                    (Number(usage?.prompt_tokens) || 0) - this.cachedPromptTokens(usage)
+                );
+            },
+
+            formatResponseUsageSummary(usage) {
+                const prompt = Number(usage?.prompt_tokens) || 0;
+                const cached = this.cachedPromptTokens(usage);
+                const evaluated = Math.max(0, prompt - cached);
+                const parts = [`${prompt.toLocaleString()} prompt`];
+                if (cached > 0) parts.push(`${cached.toLocaleString()} cached`);
+                if (evaluated > 0) parts.push(`${evaluated.toLocaleString()} evaluated`);
+                return parts.join(' · ');
             },
 
             cancelStreamTransport(stream) {
@@ -4275,6 +4732,7 @@
         this.loadPromptProfiles();
         this.resetProfileParamsDraft();
         this.$watch('activePromptProfile', () => this.resetProfileParamsDraft());
+        this.loadGenerationPresets();
 
                 const serverApiKey = {{ api_key | tojson }};
 
@@ -5272,6 +5730,7 @@
                 repetition_penalty: s.repetition_penalty ?? null,
                 presence_penalty: s.presence_penalty ?? null,
                 enable_thinking: s.enable_thinking ?? null,
+                preserve_thinking: s.preserve_thinking ?? null,
                 thinking_budget_enabled: !!(s.thinking_budget_enabled || (s.thinking_budget_tokens != null && s.thinking_budget_tokens > 0)),
                 thinking_budget_tokens: (s.thinking_budget_enabled || (s.thinking_budget_tokens != null && s.thinking_budget_tokens > 0))
                     ? this.normalizeThinkingBudgetTokens(s.thinking_budget_tokens)
@@ -5307,6 +5766,7 @@
 
     onModelSettingsChange() {
         this.modelSettingsDirty = true;
+        this.generationPresetDirty = true;
         this.schedulePersistModelSettings();
     },
 
@@ -5618,6 +6078,8 @@
     async selectModel(modelId) {
         const session = this.getChatSession(this.currentChatId, true);
         const gatewayId = this.resolveGatewayModelId(modelId);
+        const carryPreset = this.activeGenerationPreset !== 'Model recommended';
+        const carriedSettings = carryPreset ? this.cloneData(this.modelSettings) : null;
         try {
             if (session?.model && session.model !== gatewayId) {
                 this.syncSessionModelSettingsFromUi(session);
@@ -5634,7 +6096,15 @@
             }
             if (session) {
                 session.model = gatewayId;
-                if (!this.loadModelSettingsForModel(session, gatewayId)) {
+                if (carryPreset) {
+                    this.modelSettings = {
+                        ...this.defaultModelSettings(),
+                        ...carriedSettings,
+                    };
+                    this.syncSessionModelSettingsFromUi(session);
+                    this.saveModelSettingsForModel(session, gatewayId);
+                    await this.loadModelCapabilities(gatewayId);
+                } else if (!this.loadModelSettingsForModel(session, gatewayId)) {
                     session.modelSettings = null;
                     session.speculativeEngine = null;
                     session.speculativeDraftModel = null;
@@ -5761,6 +6231,9 @@
             model: this.currentModel,
             systemPrompt,
             activeProfile,
+            activeGenerationPreset: preserveDraft
+                ? this.activeGenerationPreset
+                : 'Model recommended',
             modelSettings: null,
             speculativeEngine: null,
             speculativeDraftModel: null,
@@ -5829,6 +6302,11 @@
             this.activePromptProfile = session.activeProfile
                 && this.promptProfiles.some(p => p.name === session.activeProfile)
                 ? session.activeProfile : null;
+            this.activeGenerationPreset = this.generationPresets.some(
+                p => p.name === session.activeGenerationPreset
+            ) ? session.activeGenerationPreset : 'Model recommended';
+            session.activeGenerationPreset = this.activeGenerationPreset;
+            this.generationPresetDirty = false;
             if (session.model) {
                 // Resolve legacy aliases and private cluster deployment handles
                 // to the canonical model ID advertised by /v1/models.
@@ -5924,6 +6402,8 @@
             model: chatModel,
             systemPrompt: chatSystemPrompt,
             activeProfile: session?.activeProfile ?? this.activePromptProfile ?? null,
+            activeGenerationPreset: session?.activeGenerationPreset
+                ?? this.activeGenerationPreset,
             modelSettings: settingsSnap.modelSettings,
             speculativeEngine: settingsSnap.speculativeEngine,
             speculativeDraftModel: settingsSnap.speculativeDraftModel,
@@ -5940,6 +6420,7 @@
             session.messages = messagesToSave;
             session.model = chatModel;
             session.systemPrompt = chatSystemPrompt;
+            session.activeGenerationPreset = this.activeGenerationPreset;
             session.modelSettings = settingsSnap.modelSettings;
             session.speculativeEngine = settingsSnap.speculativeEngine;
             session.speculativeDraftModel = settingsSnap.speculativeDraftModel;
@@ -6779,6 +7260,8 @@
                     time_to_first_token: ttft } = lastUsage;
                 const parts = [];
                 if (pt != null) parts.push(window.t('chat.status.prompt_tokens').replace('{count}', pt));
+                const cached = this.cachedPromptTokens(lastUsage);
+                if (cached > 0) parts.push(`${cached.toLocaleString()} cached`);
                 if (ct != null) parts.push(window.t('chat.status.generated_tokens').replace('{count}', ct));
                 if (ptps != null) parts.push(window.t('chat.status.prefill_speed').replace('{speed}', Math.round(ptps)));
                 if (gtps != null) parts.push(window.t('chat.status.generation_speed').replace('{speed}', Math.round(gtps)));
@@ -7852,6 +8335,122 @@
             this.chatSettings.maxToolRounds
         );
         localStorage.setItem('omlx-chat-settings', JSON.stringify(this.chatSettings));
+    },
+
+    defaultGenerationPresets() {
+        return [
+            {
+                name: 'Model recommended',
+                builtin: true,
+                settings: this.defaultModelSettings(),
+            },
+            {
+                name: 'Deliberate',
+                builtin: true,
+                settings: {
+                    ...this.defaultModelSettings(),
+                    temperature: 0.65,
+                    top_p: 0.9,
+                    min_p: 0.04,
+                    repetition_penalty: 1.05,
+                    enable_thinking: true,
+                    preserve_thinking: false,
+                },
+            },
+            {
+                name: 'Creative',
+                builtin: true,
+                settings: {
+                    ...this.defaultModelSettings(),
+                    temperature: 1.05,
+                    top_p: 0.95,
+                    min_p: 0.08,
+                    repetition_penalty: 1.03,
+                    preserve_thinking: false,
+                },
+            },
+        ];
+    },
+
+    loadGenerationPresets() {
+        let saved = [];
+        try {
+            saved = JSON.parse(localStorage.getItem('omlx-generation-presets') || '[]');
+        } catch (_) {
+            saved = [];
+        }
+        const custom = Array.isArray(saved)
+            ? saved.filter(p => p && typeof p.name === 'string' && p.settings)
+            : [];
+        this.generationPresets = [...this.defaultGenerationPresets(), ...custom];
+    },
+
+    persistGenerationPresets() {
+        const custom = this.generationPresets
+            .filter(p => !p.builtin)
+            .map(p => ({ name: p.name, settings: this.cloneData(p.settings) }));
+        localStorage.setItem('omlx-generation-presets', JSON.stringify(custom));
+    },
+
+    selectGenerationPreset(name) {
+        const preset = this.generationPresets.find(p => p.name === name);
+        if (!preset) return;
+        this.activeGenerationPreset = preset.name;
+        this.modelSettings = {
+            ...this.defaultModelSettings(),
+            ...this.cloneData(preset.settings),
+        };
+        this.onModelSettingsChange();
+        this.generationPresetDirty = false;
+        const session = this.getChatSession(this.currentChatId, false);
+        if (session) session.activeGenerationPreset = preset.name;
+    },
+
+    saveGenerationPreset() {
+        const active = this.generationPresets.find(
+            p => p.name === this.activeGenerationPreset
+        );
+        if (!active || active.builtin) {
+            this.saveGenerationPresetAs();
+            return;
+        }
+        active.settings = this.cloneData(this.modelSettings);
+        this.generationPresetDirty = false;
+        this.persistGenerationPresets();
+    },
+
+    saveGenerationPresetAs() {
+        const raw = window.prompt('Preset name', this.activeGenerationPreset === 'Model recommended'
+            ? ''
+            : `${this.activeGenerationPreset} copy`);
+        const name = String(raw || '').trim();
+        if (!name) return;
+        const existing = this.generationPresets.find(p => p.name === name);
+        if (existing?.builtin) {
+            window.alert('Built-in presets cannot be overwritten.');
+            return;
+        }
+        const settings = this.cloneData(this.modelSettings);
+        if (existing) {
+            existing.settings = settings;
+        } else {
+            this.generationPresets.push({ name, builtin: false, settings });
+        }
+        this.activeGenerationPreset = name;
+        this.generationPresetDirty = false;
+        this.persistGenerationPresets();
+        const session = this.getChatSession(this.currentChatId, false);
+        if (session) session.activeGenerationPreset = name;
+    },
+
+    deleteGenerationPreset() {
+        const active = this.generationPresets.find(
+            p => p.name === this.activeGenerationPreset
+        );
+        if (!active || active.builtin) return;
+        this.generationPresets = this.generationPresets.filter(p => p !== active);
+        this.persistGenerationPresets();
+        this.selectGenerationPreset('Model recommended');
     },
 
     // ===== Keyboard shortcuts =====

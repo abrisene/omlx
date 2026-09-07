@@ -40,6 +40,7 @@ The server provides:
 
 import argparse
 import asyncio
+import copy
 import importlib
 import importlib.util
 import inspect
@@ -50,7 +51,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
@@ -4578,6 +4579,9 @@ async def create_completion(
             if repetition_context_size is not None:
                 gen_kwargs["repetition_context_size"] = repetition_context_size
             gen_kwargs.update(_no_repeat_ngram_kwargs(request))
+            generation_policy = getattr(request, "generation_policy", None)
+            if generation_policy:
+                gen_kwargs["generation_policy"] = generation_policy
 
             # First prompt's first-token timestamp only: later prompts start
             # after earlier generations, so their first_token_at would count
@@ -5067,6 +5071,9 @@ async def create_chat_completion(
         if repetition_context_size is not None:
             chat_kwargs["repetition_context_size"] = repetition_context_size
         chat_kwargs.update(_no_repeat_ngram_kwargs(request))
+        generation_policy = getattr(request, "generation_policy", None)
+        if generation_policy:
+            chat_kwargs["generation_policy"] = generation_policy
 
         # Add seed for reproducible generation (best-effort)
         if request.seed is not None:
@@ -5935,6 +5942,9 @@ async def stream_completion(
     if repetition_context_size is not None:
         gen_kwargs["repetition_context_size"] = repetition_context_size
     gen_kwargs.update(_no_repeat_ngram_kwargs(request))
+    generation_policy = getattr(request, "generation_policy", None)
+    if generation_policy:
+        gen_kwargs["generation_policy"] = generation_policy
     outputs = engine.stream_generate(
         prompt=prompt,
         max_tokens=max_tokens,
@@ -6336,6 +6346,117 @@ def _merge_streamed_tool_call_prefix(streamed: list, terminal: list | None) -> l
     return merged
 
 
+async def _stream_chat_with_transactional_rewrites(
+    engine: BaseEngine,
+    messages: list,
+    kwargs: dict,
+    *,
+    rules: list[dict],
+    starts_in_reasoning: bool,
+) -> AsyncIterator[GenerationOutput]:
+    """Buffer generation, then rewind and replay from a corrected prefix."""
+    from .generation_rewrite import rewrite_once
+
+    original_max_tokens = max(1, int(kwargs.get("max_tokens", 256)))
+    remaining_tokens = original_max_tokens
+    policy = kwargs.get("generation_policy") or {}
+    max_rewrites = min(32, max(1, int(policy.get("max_rewrites", 8))))
+    active_messages = copy.deepcopy(messages)
+    accepted_prefix = ""
+    total_completion_tokens = 0
+    total_cached_tokens = 0
+    first_token_at = None
+    last_output = None
+    rewrite_count = 0
+
+    while remaining_tokens > 0:
+        attempt_kwargs = dict(kwargs)
+        attempt_kwargs["max_tokens"] = remaining_tokens
+        attempt_text = ""
+        matched = None
+        engine_stream = engine.stream_chat(messages=active_messages, **attempt_kwargs)
+        try:
+            async for output in engine_stream:
+                last_output = output
+                if first_token_at is None:
+                    first_token_at = output.first_token_at
+                if output.new_text:
+                    attempt_text += output.new_text
+                if rewrite_count < max_rewrites:
+                    matched = rewrite_once(
+                        accepted_prefix + attempt_text,
+                        rules,
+                        starts_in_reasoning=starts_in_reasoning,
+                    )
+                    if matched is not None:
+                        break
+        finally:
+            if matched is not None:
+                await engine_stream.aclose()
+
+        if last_output is not None:
+            consumed = max(0, int(last_output.completion_tokens))
+            total_completion_tokens += consumed
+            total_cached_tokens += max(0, int(last_output.cached_tokens))
+
+        if matched is None:
+            accepted_prefix += attempt_text
+            break
+
+        rewrite_count += 1
+        # Discard any same-chunk suffix generated after the bad span. The
+        # replacement becomes the new assistant prefix and that suffix is
+        # genuinely regenerated against the corrected model context.
+        accepted_prefix = matched.text[: matched.resume_at]
+        try:
+            accepted_tokens = len(engine.tokenizer.encode(accepted_prefix))
+        except Exception:
+            accepted_tokens = min(len(accepted_prefix), original_max_tokens)
+        remaining_tokens = max(0, original_max_tokens - accepted_tokens)
+        logger.info(
+            "Transactional generation rewrite %d/%d applied by rule %d at chars %d:%d",
+            rewrite_count,
+            max_rewrites,
+            matched.rule_index,
+            matched.start,
+            matched.end,
+        )
+        if remaining_tokens <= 0:
+            break
+        active_messages = copy.deepcopy(messages)
+        active_messages.append(
+            {
+                "role": "assistant",
+                "content": accepted_prefix,
+                "partial": True,
+            }
+        )
+
+    if last_output is None:
+        yield GenerationOutput(
+            text=accepted_prefix,
+            new_text=accepted_prefix,
+            completion_tokens=total_completion_tokens,
+            finished=True,
+            finish_reason="length" if remaining_tokens <= 0 else "stop",
+        )
+        return
+
+    final_tokens = []
+    with suppress(Exception):
+        final_tokens = list(engine.tokenizer.encode(accepted_prefix))
+    yield replace(
+        last_output,
+        text=accepted_prefix,
+        new_text=accepted_prefix,
+        tokens=final_tokens,
+        completion_tokens=len(final_tokens) or total_completion_tokens,
+        cached_tokens=total_cached_tokens,
+        first_token_at=first_token_at,
+        finished=True,
+    )
+
+
 async def stream_chat_completion(
     engine: BaseEngine,
     messages: list,
@@ -6432,7 +6553,19 @@ async def stream_chat_completion(
     if request.return_progress:
         # The engine keys the prefill tracker by this id.
         progress_request_id = kwargs.setdefault("_request_id", str(uuid.uuid4()))
-    engine_stream = engine.stream_chat(messages=messages, **kwargs)
+    rewrite_rules = (
+        (getattr(request, "generation_policy", None) or {}).get("rewrites") or []
+    )
+    if rewrite_rules:
+        engine_stream = _stream_chat_with_transactional_rewrites(
+            engine,
+            messages,
+            kwargs,
+            rules=rewrite_rules,
+            starts_in_reasoning=start_in_thinking,
+        )
+    else:
+        engine_stream = engine.stream_chat(messages=messages, **kwargs)
     if progress_request_id is not None:
         engine_stream = _with_prompt_progress(engine_stream, progress_request_id)
     try:

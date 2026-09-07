@@ -100,6 +100,9 @@ class SamplingParams:
     # Read-only logits processor, applied after every other processor.
     logits_observer: Any = None
 
+    # Chat-owned phase sampling and lexicon steering policy.
+    generation_policy: Optional[Dict[str, Any]] = None
+
     def __post_init__(self):
         if self.stop is None:
             self.stop = []

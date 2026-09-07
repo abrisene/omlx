@@ -7876,11 +7876,15 @@ class Scheduler:
         """Build per-request sampler and logits processors."""
         # omlx.utils.sampling.make_sampler carries the fused top-p/top-k and
         # MTP acceptance metadata that mlx_lm.sample_utils does not.
+        generation_policy = sampling_params.generation_policy or {}
+        has_phase_sampling = bool(
+            generation_policy.get("reasoning") or generation_policy.get("response")
+        )
         sampler = omlx_make_shared_sampler(
-            temp=sampling_params.temperature,
-            top_p=sampling_params.top_p,
-            min_p=sampling_params.min_p,
-            top_k=sampling_params.top_k,
+            temp=1.0 if has_phase_sampling else sampling_params.temperature,
+            top_p=0.0 if has_phase_sampling else sampling_params.top_p,
+            min_p=0.0 if has_phase_sampling else sampling_params.min_p,
+            top_k=0 if has_phase_sampling else sampling_params.top_k,
             xtc_probability=sampling_params.xtc_probability,
             xtc_threshold=sampling_params.xtc_threshold,
             xtc_special_tokens=self._xtc_special_tokens,
@@ -7983,6 +7987,23 @@ class Scheduler:
                     start_in_thinking=not optional_thinking,
                 )
                 logits_processors.append(processor)
+
+        if generation_policy:
+            from .generation_policy import build_generation_policy_processor
+
+            policy_processor = build_generation_policy_processor(
+                policy=generation_policy,
+                tokenizer=self.tokenizer,
+                prompt_token_count=(
+                    int(getattr(request, "num_prompt_tokens", 0)) if request else 0
+                ),
+                starts_in_reasoning=bool(
+                    request and getattr(request, "needs_think_prefix", False)
+                ),
+                think_end_token_ids=self._resolve_think_end_token_ids(),
+            )
+            if policy_processor is not None:
+                logits_processors.append(policy_processor)
 
         # Add grammar constraint processor for structured output.
         # Reasoning-aware grammars handle thinking/output phases through

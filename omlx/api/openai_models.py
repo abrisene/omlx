@@ -385,6 +385,8 @@ class ChatCompletionRequest(BaseModel):
     specprefill_threshold: Optional[int] = None
     # Seed for reproducible generation (best-effort)
     seed: Optional[int] = None
+    # oMLX chat-owned generation policy (phase sampling and lexicon steering).
+    generation_policy: Optional[Dict[str, Any]] = None
 
     @field_validator("stop", mode="before")
     @classmethod
@@ -414,6 +416,21 @@ class ChatCompletionRequest(BaseModel):
         template_kwargs["enable_thinking"] = self.enable_thinking
         self.chat_template_kwargs = template_kwargs
         return self
+    @field_validator("generation_policy")
+    @classmethod
+    def validate_generation_policy(cls, value):
+        if not value:
+            return value
+        from omlx.generation_rewrite import validate_rewrite_rules
+
+        rules = value.get("rewrites") or []
+        if not isinstance(rules, list):
+            raise ValueError("generation_policy.rewrites must be a list")
+        validate_rewrite_rules(rules)
+        max_rewrites = value.get("max_rewrites", 8)
+        if not isinstance(max_rewrites, int) or not 1 <= max_rewrites <= 32:
+            raise ValueError("generation_policy.max_rewrites must be between 1 and 32")
+        return value
 
 
 class AssistantMessage(BaseModel):

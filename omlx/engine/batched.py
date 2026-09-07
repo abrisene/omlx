@@ -1182,6 +1182,7 @@ class BatchedEngine(BaseEngine):
             seed=kwargs.get("seed", None),
             stop_skips_reasoning=kwargs.get("stop_skips_reasoning", False),
             logits_observer=kwargs.get("logits_observer"),
+            generation_policy=kwargs.get("generation_policy", None),
         )
 
         # SpecPrefill: forward per-request overrides to the engine, mirroring
@@ -1269,6 +1270,7 @@ class BatchedEngine(BaseEngine):
             seed=kwargs.get("seed", None),
             stop_skips_reasoning=kwargs.get("stop_skips_reasoning", False),
             logits_observer=kwargs.get("logits_observer"),
+            generation_policy=kwargs.get("generation_policy", None),
         )
 
         # SpecPrefill: pass per-request overrides to engine
