@@ -287,6 +287,7 @@
             moeOffloadFitUrl: null,
             modelSettings: {
                 model_alias: '',
+                adapter_path: '',
                 model_type_override: '',
                 max_context_window: null,
                 max_tokens: null,
@@ -2214,6 +2215,7 @@
                 const isOcr = OCR_CONFIG_MODEL_TYPES.has(model?.config_model_type || '');
                 return {
                     model_alias: s.model_alias || '',
+                    adapter_path: s.adapter_path || '',
                     model_type_override: s.model_type_override || '',
                     max_context_window: s.max_context_window || null,
                     max_tokens: s.max_tokens || null,
@@ -3568,6 +3570,9 @@
                 }
                 const payload = {
                     model_alias: ms.model_alias?.trim() || null,
+                    adapter_path: ms.is_diffusion_model
+                        ? null
+                        : (ms.adapter_path?.trim() || null),
                     model_type_override: ms.model_type_override || null,
                     max_context_window: ms.max_context_window || null,
                     max_tokens: ms.max_tokens || null,
