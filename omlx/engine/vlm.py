@@ -2149,6 +2149,8 @@ class VLMBatchedEngine(BaseEngine):
                     is_vlm=True,
                 )
                 if custom_loaded is not None:
+                    if getattr(self._model_settings, "adapter_path", None):
+                        raise ValueError("MLX adapters are unsupported by the custom quantization loader")
                     model, processor = custom_loaded
                     return model, processor
 
@@ -2182,6 +2184,8 @@ class VLMBatchedEngine(BaseEngine):
                         ),
                     )
                 if model_type == COHERE2_MOE_MODEL_TYPE:
+                    if getattr(self._model_settings, "adapter_path", None):
+                        raise ValueError("MLX adapters are unsupported by the Cohere text loader")
                     return _load_cohere2_moe_text_model(
                         self._model_name,
                         trust_remote_code=self._trust_remote_code,

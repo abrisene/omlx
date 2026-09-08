@@ -319,6 +319,8 @@ class BatchedEngine(BaseEngine):
                 is_vlm=False,
             )
             if custom_loaded is not None:
+                if getattr(self._model_settings, "adapter_path", None):
+                    raise ValueError("MLX adapters are unsupported by the custom quantization loader")
                 model, processor = custom_loaded
                 return model, getattr(processor, "tokenizer", processor)
 

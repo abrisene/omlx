@@ -856,6 +856,12 @@ else:
     app.include_router(_web_ui.router)
 app.include_router(admin_router)
 
+from .lora_routes import create_lora_router
+
+app.include_router(
+    create_lora_router(get_server_state), dependencies=[Depends(verify_api_key)]
+)
+
 _cluster_routes_registered = False
 
 
