@@ -160,3 +160,24 @@ def test_invalid_config_and_unknown_model(runtime):
         "/v1/lora-adapters?model=physical", json={"adapter_path": str(adapter)}
     ).status_code == 400
     assert client.get("/v1/lora-adapters?model=missing").status_code == 404
+
+
+@pytest.mark.parametrize("model_type", ["deepseek_v41", "mimo_v2", "mimo_v2_flash"])
+def test_new_specialized_vlm_loaders_reject_adapters(runtime, monkeypatch, model_type):
+    import json
+    from pathlib import Path
+    from omlx.patches.mimo_v2 import omnimodal
+
+    client, state, entry, adapter = runtime
+    entry.engine_type = "vlm"
+    root = Path(entry.model_path)
+    root.mkdir()
+    (root / "config.json").write_text(json.dumps({"model_type": model_type}))
+    monkeypatch.setattr(omnimodal, "has_vision_sidecar", lambda path: True)
+    info = client.get("/v1/lora-adapters?model=physical").json()
+    assert info["supported"] is False
+    assert info["unsupported_reason"] == "custom_loader"
+    response = client.post("/v1/lora-adapters?model=physical",
+                           json={"adapter_path": str(adapter)})
+    assert response.status_code == 400
+    assert state.settings_manager.get_settings("physical").adapter_path is None

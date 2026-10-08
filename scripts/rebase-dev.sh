@@ -49,7 +49,7 @@ fi
 export PYTHON_BIN="${PYTHON_BIN:-$(command -v python3.11 || command -v python3 || true)}"
 
 if [[ "$build_mode" == "skip-venv" ]]; then
-  apps/omlx-mac/Scripts/build.sh release --no-rebuild-donor
+  apps/omlx-mac/Scripts/build.sh release
 elif [[ "$build_mode" == "full" ]]; then
   apps/omlx-mac/Scripts/build.sh release --rebuild-donor
 fi

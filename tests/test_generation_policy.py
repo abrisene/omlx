@@ -221,3 +221,37 @@ async def test_transactional_rewrite_replays_from_corrected_assistant_prefix():
     assert outputs[0].new_text == "The Crown Princess waited."
     assert outputs[0].completion_tokens == len("The Crown Princess waited.")
     assert outputs[0].cached_tokens == 8
+
+
+@pytest.mark.parametrize("starts_in_reasoning", [False, True])
+def test_scheduler_policy_uses_request_prompt_reasoning_state(starts_in_reasoning):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from omlx.scheduler import Scheduler
+
+    scheduler = Scheduler(model=MagicMock(), tokenizer=MagicMock())
+    scheduler._resolve_think_end_token_ids = lambda: [9]
+    _, processors = scheduler._build_sampler_and_processors(
+        SamplingParams(generation_policy={"response": {"temperature": 2}}),
+        SimpleNamespace(needs_think_prefix=starts_in_reasoning, num_prompt_tokens=2),
+    )
+    policy = next(p for p in processors if isinstance(p, GenerationPolicyProcessor))
+    assert policy.starts_in_reasoning is starts_in_reasoning
+    assert policy.prompt_token_count == 2
+
+
+@pytest.mark.parametrize("preserve_reasoning", [False, True])
+def test_decode_capture_respects_reasoning_output_cacheability(preserve_reasoning):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from omlx.scheduler import Scheduler, SchedulerConfig
+
+    scheduler = Scheduler(model=MagicMock(), tokenizer=MagicMock(),
+                          config=SchedulerConfig(paged_cache_block_size=4))
+    scheduler.block_aware_cache = MagicMock()
+    scheduler._boundary_snapshot_required = True
+    scheduler._extract_boundary_snapshot = MagicMock(return_value=None)
+    request = SimpleNamespace(request_id="capture", num_tokens=4, num_prompt_tokens=2,
+                              needs_think_prefix=True, preserve_reasoning=preserve_reasoning)
+    scheduler._maybe_capture_boundary_snapshot(request, 123)
+    assert scheduler._extract_boundary_snapshot.called is preserve_reasoning

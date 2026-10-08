@@ -2467,5 +2467,6 @@
   "cluster.v2.cuda_guide.windows_firewall": "In PowerShell as administrator, let this Mac reach the helper.",
   "cluster.v2.cuda_guide.windows_run": "Start the helper in PowerShell. It asks this Mac to pair: type the code from its log on this page. If this Mac has more than one address, use the one the PC can reach.",
   "cluster.v2.cuda_guide.spark_run": "DGX OS comes with Docker and the NVIDIA Container Toolkit. Start the helper. It appears on this page: press Pair on it and type the code from its log.",
-  "cluster.v2.device_card.helper_ready": "{name} can speed up long prompts for models on this Mac."
+  "cluster.v2.device_card.helper_ready": "{name} can speed up long prompts for models on this Mac.",
+  "modal.model_settings.adapter_path": "Adaptér LoRA"
 }
