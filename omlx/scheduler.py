@@ -8937,6 +8937,17 @@ class Scheduler:
         if not self._detect_boundary_snapshot_need():
             return
 
+        if not _output_tokens_cacheable(request) and total_tokens > request.num_prompt_tokens:
+            self._boundary_snapshot_diagnostics.record(
+                "capture_skipped",
+                reason="beyond_cacheable_bound",
+                request_id=request.request_id,
+                token_count=total_tokens,
+                block_size=block_size,
+                source="decode",
+            )
+            return
+
         self._boundary_snapshot_diagnostics.record(
             "capture_attempt",
             request_id=request.request_id,

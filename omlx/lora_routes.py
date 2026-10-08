@@ -74,8 +74,13 @@ def create_lora_router(get_state):
             quant = config.get("quantization_config") or {}
             method = quant.get("quant_method", "").lower()
             custom_loader = method == "paroquant" or (
-                entry.engine_type == "vlm" and config.get("model_type") == "cohere2_moe"
+                entry.engine_type == "vlm"
+                and config.get("model_type") in {"cohere2_moe", "deepseek_v41"}
             )
+            if entry.engine_type == "vlm" and config.get("model_type") in {"mimo_v2", "mimo_v2_flash"}:
+                from .patches.mimo_v2.omnimodal import has_vision_sidecar
+
+                custom_loader = custom_loader or has_vision_sidecar(entry.model_path)
             if method == "compressed-tensors":
                 from .patches.qwen38_modelopt_mixed import is_supported_config
 

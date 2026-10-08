@@ -2138,6 +2138,8 @@ class VLMBatchedEngine(BaseEngine):
                     )
 
                     if has_vision_sidecar(self._model_name):
+                        if getattr(self._model_settings, "adapter_path", None):
+                            raise ValueError("MLX adapters are unsupported by the MiMo sidecar loader")
                         return load_mimo_omnimodal(
                             self._model_name,
                             model_settings=self._model_settings,
@@ -2155,6 +2157,8 @@ class VLMBatchedEngine(BaseEngine):
                     return model, processor
 
                 if model_type == "deepseek_v41":
+                    if getattr(self._model_settings, "adapter_path", None):
+                        raise ValueError("MLX adapters are unsupported by the DeepSeek V4.1 loader")
                     from ..patches.deepseek_v41.loading import load
 
                     return load(
@@ -4974,6 +4978,8 @@ class VLMBatchedEngine(BaseEngine):
             raise InvalidRequestError(
                 f"layer_ids must be between 0 and {num_layers - 1}."
             )
+
+        selected.sort()
 
         def _capture_sync():
             self._adapter.clear_vlm_position_state()
