@@ -43,6 +43,7 @@ def test_saved_thinking_settings_respect_model_capabilities(
         "reasoningLevels",
         "samplingSource",
         "snapshotGenerationSettings",
+        "buildGenerationPolicy",
     ]
     methods = [
         re.search(

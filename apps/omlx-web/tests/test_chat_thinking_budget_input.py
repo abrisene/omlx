@@ -26,6 +26,7 @@ METHODS = [
     "reasoningLevels",
     "samplingSource",
     "snapshotGenerationSettings",
+    "buildGenerationPolicy",
 ]
 
 
