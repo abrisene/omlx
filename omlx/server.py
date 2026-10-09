@@ -6469,6 +6469,11 @@ async def _stream_chat_with_transactional_rewrites(
                 "partial": True,
             }
         )
+        # The original prompt and partial mode belong to the original
+        # messages. The replay continues the corrected assistant prefix.
+        kwargs = dict(kwargs)
+        kwargs.pop("_prepared_prompt", None)
+        kwargs["is_partial"] = True
 
     if last_output is None:
         yield GenerationOutput(

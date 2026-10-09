@@ -107,7 +107,7 @@ def test_policy_survives_api_and_sampling_models():
 
 def test_chat_owns_editable_generation_presets_and_cache_telemetry():
     html = (
-        Path(__file__).parents[1] / "omlx/admin/templates/chat.html"
+        Path(__file__).parents[1] / "apps/omlx-web/omlx_web/templates/chat.html"
     ).read_text()
 
     assert "saveGenerationPresetAs()" in html
@@ -168,8 +168,12 @@ class _RewriteEngine:
 
     def __init__(self):
         self.partial_prefixes = []
+        self.prepared_prompts = []
+        self.partial_flags = []
 
     async def stream_chat(self, messages, **kwargs):
+        self.prepared_prompts.append(kwargs.get("_prepared_prompt"))
+        self.partial_flags.append(kwargs.get("is_partial"))
         partial = messages[-1] if messages[-1]["role"] == "assistant" else None
         if partial:
             self.partial_prefixes.append(partial["content"])
@@ -221,6 +225,41 @@ async def test_transactional_rewrite_replays_from_corrected_assistant_prefix():
     assert outputs[0].new_text == "The Crown Princess waited."
     assert outputs[0].completion_tokens == len("The Crown Princess waited.")
     assert outputs[0].cached_tokens == 8
+
+
+@pytest.mark.asyncio
+async def test_rewrite_replay_renders_its_own_prompt():
+    # The server prepares the original request's prompt once for reuse and
+    # resolves its partial mode. A replay continues the corrected assistant
+    # prefix, so it must render that prefix as a partial assistant turn.
+    engine = _RewriteEngine()
+    rules = [
+        {
+            "pattern": r"(Crown Princess)(?: \1)+",
+            "replacement": "$1",
+            "phase": "response",
+        }
+    ]
+    original_prompt = ("<original>", [1, 2, 3])
+
+    _ = [
+        output
+        async for output in _stream_chat_with_transactional_rewrites(
+            engine,
+            [{"role": "user", "content": "Continue."}],
+            {
+                "max_tokens": 32,
+                "generation_policy": {"rewrites": rules},
+                "_prepared_prompt": original_prompt,
+                "is_partial": False,
+            },
+            rules=rules,
+            starts_in_reasoning=False,
+        )
+    ]
+
+    assert engine.prepared_prompts == [original_prompt, None]
+    assert engine.partial_flags == [False, True]
 
 
 @pytest.mark.parametrize("starts_in_reasoning", [False, True])
