@@ -4120,7 +4120,7 @@
                 if (s.reasoning_effort && levels.includes(s.reasoning_effort)) {
                     gen.reasoning_effort = s.reasoning_effort;
                 }
-                if (s.preserve_thinking !== null) {
+                if (s.preserve_thinking != null) {
                     gen.chat_template_kwargs = {
                         ...(gen.chat_template_kwargs || {}),
                         preserve_thinking: s.preserve_thinking === true,
