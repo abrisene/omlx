@@ -2,7 +2,7 @@
 
 Date: 2026-04-22
 
-Notes on how dflash-mlx inserts hooks into a model when it loads. 
+Notes on how dflash-mlx inserts hooks into a model when it loads.
 
 dflash-mlx installs three types of hooks at the **class level** on model layers when `load_target_bundle()` is called. These hooks wrap attention and projection layers to enable speculative decoding, but they also affect any code path that uses the same model — including fallback engines.
 
@@ -53,7 +53,7 @@ class _ExactSmallProjPad(nn.Module):
     def __init__(self, linear: nn.Module, *, pad_m: int = 16):
         self.linear = linear  # stores original wrapped layer
         self.pad_m = pad_m
-    
+
     def __call__(self, x: mx.array) -> mx.array:
         if x.ndim == 3 and x.shape[1] < self.pad_m:
             # Pad short sequences before projection
