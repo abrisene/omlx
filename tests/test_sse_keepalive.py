@@ -624,6 +624,18 @@ async def test_prefill_emits_response_events_before_model_output(
 
 
 @pytest.mark.asyncio
+async def test_responses_generation_policy_reaches_engine(responses_route):
+    policy = {"enabled": True, "response": {"temperature": 0.2}}
+    stream = await responses_route.create("chunk", generation_policy=policy)
+    try:
+        assert responses_route.engine.preflight_chat.await_args.kwargs[
+            "generation_policy"
+        ] == policy
+    finally:
+        await stream.aclose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["comment", "off"])
 async def test_responses_preserve_comment_and_off_modes(responses_route, mode):
     route = responses_route

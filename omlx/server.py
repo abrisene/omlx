@@ -8672,6 +8672,8 @@ async def create_response(
             "xtc_probability": xtc_probability,
             "xtc_threshold": xtc_threshold,
         }
+        if request.generation_policy:
+            chat_kwargs["generation_policy"] = request.generation_policy
 
         # Widen the repetition-penalty look-back window when the client
         # asks for it (mlx-lm default window is 20 tokens).

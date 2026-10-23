@@ -1315,6 +1315,24 @@ class TestResponsesRequest:
         )
         assert req.chat_template_kwargs == {"enable_thinking": False}
 
+    def test_generation_policy_is_validated(self):
+        policy = {
+            "enabled": True,
+            "response": {"temperature": 0.2},
+            "rewrites": [
+                {"phase": "response", "pattern": "foo", "replacement": "bar"}
+            ],
+        }
+        req = ResponsesRequest(model="test", generation_policy=policy)
+        assert req.generation_policy == policy
+
+    def test_generation_policy_rejects_invalid_rewrites(self):
+        with pytest.raises(ValueError, match="generation_policy.rewrites"):
+            ResponsesRequest(
+                model="test",
+                generation_policy={"rewrites": "not-a-list"},
+            )
+
     def test_extra_fields_allowed(self):
         """Unknown fields should not cause validation errors."""
         req = ResponsesRequest(
