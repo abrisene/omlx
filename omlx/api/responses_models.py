@@ -4,7 +4,7 @@
 import json
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_serializer, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from .shared_models import IDPrefix, generate_id, get_unix_timestamp
 
@@ -130,6 +130,22 @@ class ResponsesRequest(BaseModel):
     generation_policy: Optional[Dict[str, Any]] = None
 
     model_config = {"extra": "allow"}
+
+    @field_validator("generation_policy")
+    @classmethod
+    def validate_generation_policy(cls, value):
+        if not value:
+            return value
+        from omlx.generation_rewrite import validate_rewrite_rules
+
+        rules = value.get("rewrites") or []
+        if not isinstance(rules, list):
+            raise ValueError("generation_policy.rewrites must be a list")
+        validate_rewrite_rules(rules)
+        max_rewrites = value.get("max_rewrites", 8)
+        if not isinstance(max_rewrites, int) or not 1 <= max_rewrites <= 32:
+            raise ValueError("generation_policy.max_rewrites must be between 1 and 32")
+        return value
 
 
 # =============================================================================
