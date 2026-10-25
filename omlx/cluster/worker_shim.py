@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 #: The exact candidate ``discover_remote_python_executable`` looks for.
 CLUSTER_PYTHON_SHIM = "~/.omlx/bin/omlx-cluster-python"
+CLUSTER_PYTHON_SHIM_PATH_ENV = "OMLX_CLUSTER_PYTHON_SHIM_PATH"
 
 _SHIM_DIRECTORY = (".omlx", "bin")
 _SHIM_NAME = "omlx-cluster-python"
@@ -45,6 +46,31 @@ _INHERITED_VARIABLES = (
     "PYTHONDONTWRITEBYTECODE",
     "OMLX_BASE_PATH",
 )
+
+
+def cluster_python_shim_path(
+    *,
+    home: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> Path:
+    """Resolve the local published shim path, preserving the user default.
+
+    ``OMLX_CLUSTER_PYTHON_SHIM_PATH`` is an exact-file override for isolated
+    installs and tests. Remote SSH candidates continue to use
+    ``CLUSTER_PYTHON_SHIM`` so the peer expands its own home directory.
+    """
+
+    environ = os.environ if environ is None else environ
+    override = (environ.get(CLUSTER_PYTHON_SHIM_PATH_ENV) or "").strip()
+    if override:
+        path = Path(override).expanduser()
+        if path.is_absolute():
+            return path
+        logger.warning(
+            "%s must be an absolute path; using the default cluster shim path",
+            CLUSTER_PYTHON_SHIM_PATH_ENV,
+        )
+    return (home or Path.home()).joinpath(*_SHIM_DIRECTORY, _SHIM_NAME)
 
 
 def _render(executable: str, environ: Mapping[str, str]) -> str:
@@ -84,8 +110,8 @@ def ensure_cluster_python_shim(
         logger.debug("Not publishing a cluster shim for %r: not absolute", executable)
         return None
 
-    directory = (home or Path.home()).joinpath(*_SHIM_DIRECTORY)
-    target = directory / _SHIM_NAME
+    target = cluster_python_shim_path(home=home, environ=environ)
+    directory = target.parent
     script = _render(executable, environ)
     temporary = directory / f".{_SHIM_NAME}.new"
     try:

@@ -391,9 +391,9 @@ def _advertised_python_executable() -> str:
     a different install must not be advertised.
     """
 
-    from pathlib import Path
+    from .worker_shim import cluster_python_shim_path
 
-    shim = Path.home() / ".omlx" / "bin" / "omlx-cluster-python"
+    shim = cluster_python_shim_path()
     try:
         if (
             shim.is_file()

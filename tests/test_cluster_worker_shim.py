@@ -14,7 +14,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from omlx.cluster.worker_shim import CLUSTER_PYTHON_SHIM, ensure_cluster_python_shim
+from omlx.cluster.worker_shim import (
+    CLUSTER_PYTHON_SHIM,
+    CLUSTER_PYTHON_SHIM_PATH_ENV,
+    cluster_python_shim_path,
+    ensure_cluster_python_shim,
+)
 
 
 def test_shim_is_written_executable_at_the_probed_candidate_path(tmp_path):
@@ -25,6 +30,28 @@ def test_shim_is_written_executable_at_the_probed_candidate_path(tmp_path):
     assert os.access(written, os.X_OK)
     # The discovery candidate list spells this exact path.
     assert CLUSTER_PYTHON_SHIM == "~/.omlx/bin/omlx-cluster-python"
+
+
+def test_shim_path_override_is_used_by_publisher_and_local_discovery(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "isolated" / "omlx-cluster-python"
+    monkeypatch.setenv(CLUSTER_PYTHON_SHIM_PATH_ENV, str(target))
+
+    assert cluster_python_shim_path() == target
+    assert ensure_cluster_python_shim(executable=sys.executable) == target
+
+    from omlx.cluster.probe import _advertised_python_executable
+
+    assert _advertised_python_executable() == str(target)
+
+
+def test_relative_shim_path_override_falls_back_to_default(tmp_path, monkeypatch):
+    monkeypatch.setenv(CLUSTER_PYTHON_SHIM_PATH_ENV, "relative/cluster-python")
+
+    assert cluster_python_shim_path(home=tmp_path) == (
+        tmp_path / ".omlx" / "bin" / "omlx-cluster-python"
+    )
 
 
 def test_shim_reproduces_the_bundled_interpreter_environment(tmp_path):
