@@ -52,7 +52,7 @@ def cluster_python_shim_path(
     *,
     home: Path | None = None,
     environ: Mapping[str, str] | None = None,
-) -> Path:
+) -> Path | None:
     """Resolve the local published shim path, preserving the user default.
 
     ``OMLX_CLUSTER_PYTHON_SHIM_PATH`` is an exact-file override for isolated
@@ -67,9 +67,10 @@ def cluster_python_shim_path(
         if path.is_absolute():
             return path
         logger.warning(
-            "%s must be an absolute path; using the default cluster shim path",
+            "%s must be an absolute path; refusing to publish a cluster shim",
             CLUSTER_PYTHON_SHIM_PATH_ENV,
         )
+        return None
     return (home or Path.home()).joinpath(*_SHIM_DIRECTORY, _SHIM_NAME)
 
 
@@ -111,6 +112,8 @@ def ensure_cluster_python_shim(
         return None
 
     target = cluster_python_shim_path(home=home, environ=environ)
+    if target is None:
+        return None
     directory = target.parent
     script = _render(executable, environ)
     temporary = directory / f".{_SHIM_NAME}.new"

@@ -394,6 +394,8 @@ def _advertised_python_executable() -> str:
     from .worker_shim import cluster_python_shim_path
 
     shim = cluster_python_shim_path()
+    if shim is None:
+        return sys.executable
     try:
         if (
             shim.is_file()

@@ -49,9 +49,13 @@ def test_shim_path_override_is_used_by_publisher_and_local_discovery(
 def test_relative_shim_path_override_falls_back_to_default(tmp_path, monkeypatch):
     monkeypatch.setenv(CLUSTER_PYTHON_SHIM_PATH_ENV, "relative/cluster-python")
 
-    assert cluster_python_shim_path(home=tmp_path) == (
-        tmp_path / ".omlx" / "bin" / "omlx-cluster-python"
-    )
+    assert cluster_python_shim_path(home=tmp_path) is None
+    assert ensure_cluster_python_shim(home=tmp_path, executable=sys.executable) is None
+    assert not (tmp_path / ".omlx" / "bin").exists()
+
+    from omlx.cluster.probe import _advertised_python_executable
+
+    assert _advertised_python_executable() == sys.executable
 
 
 def test_shim_reproduces_the_bundled_interpreter_environment(tmp_path):
