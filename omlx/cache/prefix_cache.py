@@ -479,6 +479,13 @@ class BlockAwarePrefixCache(CacheManager):
             payloads[layer_idx] = (cache_data, layer_state.get("meta_state", ()))
         return payloads
 
+    def _gdn_cache_model_name(self) -> str:
+        """Return the runtime cache namespace used by recurrent sidecars."""
+        return (
+            getattr(self.paged_cache, "cache_identity", None)
+            or self.paged_cache.model_name
+        )
+
     def _has_split_gdn_checkpoint(
         self,
         block_hash: bytes,
@@ -494,7 +501,7 @@ class BlockAwarePrefixCache(CacheManager):
             return False
         try:
             cache_signature = signature_builder(
-                model_name=self.paged_cache.model_name,
+                model_name=self._gdn_cache_model_name(),
                 num_layers=len(layer_cache_types or []),
                 block_size=self.block_size,
                 layer_cache_types=layer_cache_types or [],
@@ -523,7 +530,7 @@ class BlockAwarePrefixCache(CacheManager):
                     block_hash,
                     layer_cache_types=layer_cache_types,
                     layer_meta_states=layer_meta_states,
-                    model_name=self.paged_cache.model_name,
+                    model_name=self._gdn_cache_model_name(),
                     block_size=self.block_size,
                 )
             )
@@ -574,7 +581,7 @@ class BlockAwarePrefixCache(CacheManager):
                     source_block_hash=block_hash,
                     layer_cache_types=layer_cache_types,
                     layer_meta_states=layer_meta_states,
-                    model_name=self.paged_cache.model_name,
+                    model_name=self._gdn_cache_model_name(),
                     block_size=self.block_size,
                 )
             )
@@ -2181,7 +2188,7 @@ class BlockAwarePrefixCache(CacheManager):
                     self.paged_ssd_cache.forget_gdn_checkpoint(
                         block_hash,
                         self.paged_ssd_cache.gdn_cache_signature_for(
-                            model_name=self.paged_cache.model_name,
+                            model_name=self._gdn_cache_model_name(),
                             num_layers=len(layer_cache_types),
                             block_size=self.block_size,
                             layer_cache_types=layer_cache_types,

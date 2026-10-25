@@ -7,6 +7,7 @@ import mlx.core as mx
 import pytest
 
 from omlx.cache.boundary_snapshot_store import BoundarySnapshotSSDStore
+from omlx.cache.identity import model_cache_identity
 from omlx.cache.paged_cache import BlockTable, CacheBlock, PagedCacheManager
 from omlx.cache.paged_ssd_cache import PagedSSDCacheManager
 from omlx.cache.prefix_cache import BlockAwarePrefixCache
@@ -81,10 +82,12 @@ def test_unsupported_gdn_layout_logs_embedded_fallback_once(tmp_path, caplog):
 
 def test_split_store_restores_one_sidecar_and_walks_back(tmp_path):
     cache_dir = tmp_path / "cache"
+    cache_identity = model_cache_identity("hybrid-model")
     paged = PagedCacheManager(
         block_size=BLOCK_SIZE,
         max_blocks=100,
         model_name="hybrid-model",
+        cache_identity=cache_identity,
         initial_blocks=100,
     )
     ssd = PagedSSDCacheManager(
@@ -144,7 +147,7 @@ def test_split_store_restores_one_sidecar_and_walks_back(tmp_path):
         assert all(block_hash is not None for block_hash in hashes)
 
         signature = ssd.gdn_cache_signature_for(
-            model_name="hybrid-model",
+            model_name=cache_identity,
             num_layers=2,
             block_size=BLOCK_SIZE,
             layer_cache_types=LAYER_TYPES,
@@ -231,7 +234,7 @@ def test_split_store_restores_one_sidecar_and_walks_back(tmp_path):
             )
             assert legacy_staged is not None
             legacy_signature = ssd.cache_signature_for(
-                model_name="hybrid-model",
+                model_name=cache_identity,
                 num_layers=2,
                 block_size=BLOCK_SIZE,
                 layer_cache_types=LAYER_TYPES,
@@ -241,7 +244,7 @@ def test_split_store_restores_one_sidecar_and_walks_back(tmp_path):
                     hashes[-1],
                     legacy_staged,
                     token_count=12,
-                    model_name="hybrid-model",
+                    model_name=cache_identity,
                     cache_signature=legacy_signature,
                     block_size=BLOCK_SIZE,
                 )
@@ -625,10 +628,12 @@ def test_split_exact_prefix_fails_closed_without_checkpoint_writer(tmp_path):
 
 def test_split_exact_prefix_commits_terminal_sidecar_and_restores(tmp_path):
     cache_dir = tmp_path / "cache"
+    cache_identity = model_cache_identity("hybrid-model")
     paged = PagedCacheManager(
         block_size=BLOCK_SIZE,
         max_blocks=100,
         model_name="hybrid-model",
+        cache_identity=cache_identity,
         initial_blocks=100,
     )
     ssd = PagedSSDCacheManager(
@@ -674,7 +679,7 @@ def test_split_exact_prefix_commits_terminal_sidecar_and_restores(tmp_path):
         assert ordinary_remaining == [*tokens, 99]
         hashes = _block_hashes(prefix, stored)
         signature = ssd.gdn_cache_signature_for(
-            model_name="hybrid-model",
+            model_name=cache_identity,
             num_layers=2,
             block_size=BLOCK_SIZE,
             layer_cache_types=LAYER_TYPES,
