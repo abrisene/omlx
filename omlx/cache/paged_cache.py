@@ -513,11 +513,16 @@ class PagedCacheManager(CacheManager):
         enable_caching: bool = True,
         model_name: str = "",
         initial_blocks: int = 256,
+        cache_identity: str | None = None,
     ):
         self.block_size = block_size
         self.max_blocks = max_blocks
         self.enable_caching = enable_caching
         self.model_name = model_name
+        # Keep the public model name for metadata and diagnostics while
+        # allowing runtime-specific weights to use a separate hash namespace.
+        # The default preserves existing cache keys.
+        self.cache_identity = cache_identity or model_name
         self.initial_blocks = initial_blocks
 
         # Warn if model_name is not set (cache isolation may not work)
@@ -981,7 +986,7 @@ class PagedCacheManager(CacheManager):
                 # Compute chain hash
                 block_hash = compute_block_hash(
                     parent_hash, block_tokens,
-                    extra_keys=extra_keys, model_name=self.model_name,
+                    extra_keys=extra_keys, model_name=self.cache_identity,
                 )
                 block.block_hash = block_hash
                 block.token_count = len(block_tokens)
@@ -1032,7 +1037,7 @@ class PagedCacheManager(CacheManager):
                 # Compute expected hash
                 block_hash = compute_block_hash(
                     parent_hash, block_tokens,
-                    extra_keys=block_extra_keys, model_name=self.model_name,
+                    extra_keys=block_extra_keys, model_name=self.cache_identity,
                 )
 
                 # Look up in cache
@@ -1109,7 +1114,7 @@ class PagedCacheManager(CacheManager):
         with self._lock:
             block_hash = compute_block_hash(
                 parent_hash, tokens, extra_keys=extra_keys,
-                model_name=self.model_name,
+                model_name=self.cache_identity,
             )
             block = self.cached_block_hash_to_block.get_block(block_hash)
             if block:
@@ -1142,7 +1147,7 @@ class PagedCacheManager(CacheManager):
         with self._lock:
             block_hash = compute_block_hash(
                 parent_hash, tokens, extra_keys=extra_keys,
-                model_name=self.model_name,
+                model_name=self.cache_identity,
             )
             block.block_hash = block_hash
             self.cached_block_hash_to_block.insert(block_hash, block)
@@ -1227,7 +1232,7 @@ class PagedCacheManager(CacheManager):
                     extra_key_token_start=extra_key_token_start,
                     extra_key_ranges=extra_key_ranges,
                 ),
-                model_name=self.model_name,
+                model_name=self.cache_identity,
             )
             if expected != tail_hash:
                 continue

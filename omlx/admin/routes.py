@@ -8063,7 +8063,11 @@ async def probe_cache(
     # Compute chain-hashed block sequence.
     from ..cache.paged_cache import compute_block_hash
 
-    model_name = getattr(paged_cache, "model_name", None) if paged_cache else None
+    cache_identity = None
+    if paged_cache is not None:
+        cache_identity = getattr(paged_cache, "cache_identity", None) or getattr(
+            paged_cache, "model_name", None
+        )
     ssd_index = getattr(ssd_manager, "_index", None) if ssd_manager else None
     ssd_hot = getattr(ssd_manager, "_hot_cache", None) if ssd_manager else None
 
@@ -8093,7 +8097,7 @@ async def probe_cache(
             parent_hash,
             block_tokens,
             extra_keys=None,
-            model_name=model_name,
+            model_name=cache_identity,
         )
         parent_hash = block_hash
 

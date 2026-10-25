@@ -84,7 +84,7 @@ def create_lora_router(get_state):
             if method == "compressed-tensors":
                 from .patches.qwen38_modelopt_mixed import is_supported_config
 
-                custom_loader = is_supported_config(config)
+                custom_loader = custom_loader or is_supported_config(config)
         except (OSError, ValueError):
             pass
         supported = supported and not custom_loader

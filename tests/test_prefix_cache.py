@@ -20,6 +20,7 @@ from omlx.cache.paged_cache import (
     PagedCacheManager,
     compute_block_hash,
 )
+from omlx.cache.identity import model_cache_identity
 from omlx.cache.paged_ssd_cache import PagedSSDCacheManager
 from omlx.cache.prefix_cache import BlockAwarePrefixCache, BlockCacheEntry
 from omlx.cache.hybrid_cache import ModelCacheConfig
@@ -5032,7 +5033,9 @@ TYPES = ["ArraysCache", "KVCache", "CacheList"]
 ## MockModel: uses the existing one in this module
 
 
-def _make_cache(cache_dir, *, num_layers=None, ssd_only=False):
+def _make_cache(
+    cache_dir, *, num_layers=None, ssd_only=False, cache_identity=None
+):
     if num_layers is None:
         num_layers = len(TYPES)
     ssd = PagedSSDCacheManager(
@@ -5048,6 +5051,7 @@ def _make_cache(cache_dir, *, num_layers=None, ssd_only=False):
         block_size=BLOCK_SIZE,
         max_blocks=200,
         model_name="test-model",
+        cache_identity=cache_identity,
         initial_blocks=200,
     )
     paged.set_paged_ssd_cache_manager(ssd)
@@ -5222,6 +5226,91 @@ def test_bounded_restore_matches_lazy_restore(tmp_path, monkeypatch, snapshot_la
     assert kv_keys.shape[2] == expected_tokens
     assert mx.array_equal(kv_keys, _position_kv(expected_tokens)[0]).item()
     ssd.close()
+
+
+def test_persistent_cache_isolated_by_runtime_cache_identity(tmp_path):
+    cache_dir = tmp_path / "adapter-cache"
+    total = NUM_BLOCKS * BLOCK_SIZE
+    adapter_a = tmp_path / "adapter-a"
+    adapter_b = tmp_path / "adapter-b"
+    adapter_a.mkdir()
+    adapter_b.mkdir()
+    for adapter, weights in ((adapter_a, b"adapter-a"), (adapter_b, b"adapter-b")):
+        (adapter / "adapter_config.json").write_text(
+            '{"rank": 4}', encoding="utf-8"
+        )
+        (adapter / "adapters.safetensors").write_bytes(weights)
+    identity_a = model_cache_identity("test-model", str(adapter_a))
+    identity_b = model_cache_identity("test-model", str(adapter_b))
+
+    original, original_ssd = _make_cache(
+        cache_dir, ssd_only=True, cache_identity=identity_a
+    )
+    _store(original)
+    original_ssd.close()
+
+    changed, changed_ssd = _make_cache(
+        cache_dir, ssd_only=True, cache_identity=identity_b
+    )
+    try:
+        table, remaining = changed.fetch_cache(
+            "changed-adapter", list(range(total)) + [99]
+        )
+        assert table is None
+        assert remaining == list(range(total)) + [99]
+    finally:
+        changed_ssd.close()
+
+    restored, restored_ssd = _make_cache(
+        cache_dir, ssd_only=True, cache_identity=identity_a
+    )
+    try:
+        table, remaining = restored.fetch_cache(
+            "same-adapter", list(range(total)) + [99]
+        )
+        assert table is not None
+        assert table.num_tokens == total
+        assert remaining == [99]
+    finally:
+        restored_ssd.close()
+
+
+def test_versioned_base_cache_misses_legacy_and_reuses_after_restart(tmp_path):
+    cache_dir = tmp_path / "base-cache"
+    total = NUM_BLOCKS * BLOCK_SIZE
+
+    legacy, legacy_ssd = _make_cache(
+        cache_dir, ssd_only=True, cache_identity="test-model"
+    )
+    _store(legacy)
+    legacy_ssd.close()
+
+    cache_identity = model_cache_identity("test-model")
+    fresh, fresh_ssd = _make_cache(
+        cache_dir, ssd_only=True, cache_identity=cache_identity
+    )
+    try:
+        table, remaining = fresh.fetch_cache(
+            "fresh-policy", list(range(total)) + [99]
+        )
+        assert table is None
+        assert remaining == list(range(total)) + [99]
+        _store(fresh)
+    finally:
+        fresh_ssd.close()
+
+    restarted, restarted_ssd = _make_cache(
+        cache_dir, ssd_only=True, cache_identity=cache_identity
+    )
+    try:
+        table, remaining = restarted.fetch_cache(
+            "same-policy", list(range(total)) + [99]
+        )
+        assert table is not None
+        assert table.num_tokens == total
+        assert remaining == [99]
+    finally:
+        restarted_ssd.close()
 
 
 def test_pool_flush_gated_on_allocator_size(tmp_path, monkeypatch):

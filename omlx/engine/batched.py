@@ -17,6 +17,7 @@ from typing import Any
 from ..adapter.output_parser import repair_tool_parser
 from ..api.tool_calling import convert_tools_for_template
 from ..api.utils import clean_special_tokens, detect_and_strip_partial
+from ..cache.identity import model_cache_identity
 from ..model_settings import (
     a8_prefill_on,
     ane_prefill_backend,
@@ -737,11 +738,17 @@ class BatchedEngine(BaseEngine):
             else SchedulerConfig()
         )
         scheduler_config.moe_offload_active = bool(moe_offload_wrapped)
+        cache_model_name = scheduler_config.model_name or self._model_name
+        scheduler_config.cache_identity = model_cache_identity(
+            cache_model_name,
+            getattr(self._model_settings, "adapter_path", None),
+        )
         signature = getattr(self._model, "_omlx_k2_ane_signature", None)
         if signature:
             scheduler_config.model_name = (
-                (scheduler_config.model_name or self._model_name) + ":" + signature
+                cache_model_name + ":" + signature
             )
+            scheduler_config.cache_identity += ":" + signature
         engine_config = EngineConfig(
             model_name=self._model_name,
             scheduler_config=scheduler_config,

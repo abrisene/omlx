@@ -181,3 +181,25 @@ def test_new_specialized_vlm_loaders_reject_adapters(runtime, monkeypatch, model
                            json={"adapter_path": str(adapter)})
     assert response.status_code == 400
     assert state.settings_manager.get_settings("physical").adapter_path is None
+
+
+def test_specialized_vlm_loader_stays_unsupported_with_compressed_tensors(runtime):
+    import json
+    from pathlib import Path
+
+    client, _, entry, _ = runtime
+    entry.engine_type = "vlm"
+    model_dir = Path(entry.model_path)
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "model_type": "deepseek_v41",
+                "quantization_config": {"quant_method": "compressed-tensors"},
+            }
+        )
+    )
+
+    info = client.get("/v1/lora-adapters?model=physical").json()
+    assert info["supported"] is False
+    assert info["unsupported_reason"] == "custom_loader"

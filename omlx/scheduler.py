@@ -2003,6 +2003,7 @@ class SchedulerConfig:
 
     # Model identification (for cache isolation between different models)
     model_name: str = ""  # OpenAI API model name (e.g., "mlx-community/Llama-3.2-3B")
+    cache_identity: str | None = None  # Runtime weights identity for KV block hashes
     model_path: str = ""  # Filesystem path to the model (e.g., "/cache/models--Org--Name/snapshots/abc123")
 
     # GC/cleanup settings (memory optimization)
@@ -2646,6 +2647,7 @@ class Scheduler:
                 block_size=self.config.paged_cache_block_size,
                 max_blocks=max_blocks,
                 model_name=self.config.model_name,
+                cache_identity=self.config.cache_identity,
                 initial_blocks=self.config.initial_cache_blocks,
             )
             self.block_aware_cache = BlockAwarePrefixCache(

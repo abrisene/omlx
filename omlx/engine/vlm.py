@@ -48,6 +48,7 @@ from ..api.utils import (
     remove_special_tokens_preserve_whitespace,
 )
 from ..cache.paged_ssd_cache import numerics_revision_for_model
+from ..cache.identity import model_cache_identity
 from ..cache.vision_feature_cache import VisionFeatureSSDCache
 from ..exceptions import InvalidRequestError
 from ..model_settings import (
@@ -1758,6 +1759,10 @@ class VLMBatchedEngine(BaseEngine):
         self._realtime_session: RealtimeVoiceSession | None = None
         self._realtime_opening = False
 
+    def _persistent_cache_identity(self) -> str:
+        """Identity used by paged and vision caches for this loaded runtime."""
+        return getattr(self, "_cache_identity", self._model_name)
+
     async def _preflight_or_raise_with_eviction(
         self,
         scheduler: Any,
@@ -2456,6 +2461,11 @@ class VLMBatchedEngine(BaseEngine):
                 self._model_name,
             )
 
+        self._cache_identity = model_cache_identity(
+            getattr(self._scheduler_config, "model_name", None) or self._model_name,
+            getattr(self._model_settings, "adapter_path", None),
+        )
+
         # Initialize vision feature cache
         vision_ssd_dir = None
         if not self.is_diffusion_model:
@@ -2517,6 +2527,7 @@ class VLMBatchedEngine(BaseEngine):
             else SchedulerConfig()
         )
         scheduler_config.moe_offload_active = bool(moe_offload_wrapped)
+        scheduler_config.cache_identity = self._persistent_cache_identity()
 
         engine_config = EngineConfig(
             model_name=self._model_name,
@@ -3712,7 +3723,7 @@ class VLMBatchedEngine(BaseEngine):
             for i, f in zip(miss_idx, split_miss):
                 full[i] = f
                 self._vision_cache.put(
-                    per_hashes[i], self._model_name, f, grid=grids[i]
+                    per_hashes[i], self._persistent_cache_identity(), f, grid=grids[i]
                 )
             combined = mx.concatenate(full, axis=0)
             if not self._vision_features_match_image_tokens(
@@ -3785,8 +3796,8 @@ class VLMBatchedEngine(BaseEngine):
             feats: List[Optional[mx.array]] = []
             grids: List[Optional[List[int]]] = []
             for h in per_hashes:
-                feat = self._vision_cache.get(h, self._model_name)
-                grid = self._vision_cache.get_grid(h, self._model_name)
+                feat = self._vision_cache.get(h, self._persistent_cache_identity())
+                grid = self._vision_cache.get_grid(h, self._persistent_cache_identity())
                 # A row count mismatch means a different resize regime.
                 if (
                     feat is not None
@@ -3837,7 +3848,7 @@ class VLMBatchedEngine(BaseEngine):
                     grids[i] = miss_grids[k]
                     self._vision_cache.put(
                         per_hashes[i],
-                        self._model_name,
+                        self._persistent_cache_identity(),
                         split_miss[k],
                         grid=miss_grids[k],
                     )
@@ -4045,7 +4056,7 @@ class VLMBatchedEngine(BaseEngine):
         if self._vision_cache is None or not self._vision_cache_enabled:
             return None
         token_count = self._image_token_count(input_ids, "video_token_id")
-        features = self._vision_cache.get(video_identity, self._model_name)
+        features = self._vision_cache.get(video_identity, self._persistent_cache_identity())
         if features is not None and self._vision_features_match_image_tokens(
             features, token_count
         ):
@@ -4066,7 +4077,7 @@ class VLMBatchedEngine(BaseEngine):
         ):
             return None
         mx.eval(features)
-        self._vision_cache.put(video_identity, self._model_name, features)
+        self._vision_cache.put(video_identity, self._persistent_cache_identity(), features)
         return features
 
     def _vision_features_match_image_tokens(
@@ -4542,7 +4553,8 @@ class VLMBatchedEngine(BaseEngine):
             ):
                 per_hashes = compute_per_image_hashes(images)
                 cached_per_image = [
-                    self._vision_cache.get(h, self._model_name) for h in per_hashes
+                    self._vision_cache.get(h, self._persistent_cache_identity())
+                    for h in per_hashes
                 ]
 
                 # Per-image entries are keyed by the image alone, but the
@@ -4565,7 +4577,9 @@ class VLMBatchedEngine(BaseEngine):
                     # Fallback: whole-request entry (stored when per-image split
                     # is unsupported, e.g. Gemma 4 multi-image with per-image
                     # resize). Mirrors the store-side branch below.
-                    cached_whole = self._vision_cache.get(image_hash, self._model_name)
+                    cached_whole = self._vision_cache.get(
+                        image_hash, self._persistent_cache_identity()
+                    )
 
                 used_cached_features = False
                 if per_image_usable:
@@ -4630,7 +4644,7 @@ class VLMBatchedEngine(BaseEngine):
                                 ):
                                     grid = _grid_row(grid_thw, j)
                                     self._vision_cache.put(
-                                        h, self._model_name, f, grid=grid
+                                        h, self._persistent_cache_identity(), f, grid=grid
                                     )
                                 logger.debug(
                                     "Vision feature cache miss, stored %d per-image entries",
@@ -4639,7 +4653,9 @@ class VLMBatchedEngine(BaseEngine):
                             else:
                                 # Split unsupported for this model — store whole-request
                                 self._vision_cache.put(
-                                    image_hash, self._model_name, features
+                                    image_hash,
+                                    self._persistent_cache_identity(),
+                                    features,
                                 )
                                 logger.debug(
                                     "Vision feature cache miss, stored whole-request: %s",

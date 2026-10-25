@@ -37,6 +37,7 @@ class CacheConfig:
         max_paged_ssd_cache_size: Maximum size of paged SSD cache in bytes.
         max_kv_cache_memory: Maximum GPU memory for KV cache.
         model_name: Model name for cache isolation.
+        cache_identity: Optional runtime identity for block-hash isolation.
     """
 
     block_size: int = 64
@@ -46,6 +47,7 @@ class CacheConfig:
     max_paged_ssd_cache_size: int = 100 * 1024 * 1024 * 1024  # 100GB
     max_kv_cache_memory: Optional[int] = None
     model_name: str = ""
+    cache_identity: Optional[str] = None
 
 
 class CacheFactory:
@@ -94,6 +96,7 @@ class CacheFactory:
             max_blocks=config.max_num_blocks,
             enable_caching=True,
             model_name=config.model_name,
+            cache_identity=config.cache_identity,
             initial_blocks=config.initial_blocks,
         )
 
