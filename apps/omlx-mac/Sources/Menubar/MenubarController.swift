@@ -41,6 +41,7 @@ final class MenubarController: NSObject {
     private let client: OMLXClient?
     private let openModelSettings: (String) -> Void
     private let openAppView: () -> Void
+    private let showHiddenMenubarWarning: () -> Void
     private let openAppearanceSettings: () -> Void
     private let requestQuit: () -> Void
 
@@ -109,6 +110,7 @@ final class MenubarController: NSObject {
         client: OMLXClient? = nil,
         openModelSettings: @escaping (String) -> Void = { _ in },
         openAppView: @escaping () -> Void = {},
+        showHiddenMenubarWarning: @escaping () -> Void = {},
         openAppearanceSettings: @escaping () -> Void = {},
         requestQuit: @escaping () -> Void = { NSApp.terminate(nil) }
     ) {
@@ -119,6 +121,7 @@ final class MenubarController: NSObject {
         self.client = client
         self.openModelSettings = openModelSettings
         self.openAppView = openAppView
+        self.showHiddenMenubarWarning = showHiddenMenubarWarning
         self.openAppearanceSettings = openAppearanceSettings
         self.requestQuit = requestQuit
 
@@ -760,9 +763,15 @@ final class MenubarController: NSObject {
     }
 
     private func startVisibilityWatcher() {
-        let watcher = MenubarVisibilityWatcher(initial: statusItem) { [weak self] in
-            self?.recreateStatusItem() ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        }
+        let watcher = MenubarVisibilityWatcher(
+            initial: statusItem,
+            recreate: { [weak self] in
+                self?.recreateStatusItem() ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+            },
+            presentHiddenWarning: { [weak self] in
+                self?.showHiddenMenubarWarning()
+            }
+        )
         watcher.scheduleInitialCheck(after: 3.0)
         self.visibilityWatcher = watcher
     }

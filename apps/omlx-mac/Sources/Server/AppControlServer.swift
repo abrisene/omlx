@@ -154,6 +154,10 @@ final class AppControlServer: @unchecked Sendable {
     }
 
     private func handle(clientFD: Int32) {
+        guard Self.suppressSigPipe(on: clientFD) else {
+            close(clientFD)
+            return
+        }
         defer { close(clientFD) }
         let data = readRequest(fd: clientFD)
         let response: Response
@@ -173,12 +177,16 @@ final class AppControlServer: @unchecked Sendable {
                 return
             }
             let semaphore = DispatchSemaphore(value: 0)
-            let box = ResponseBox()
+            let gate = AppControlRequestGate()
             Task { @MainActor [weak self] in
+                guard gate.beginHandling() else {
+                    semaphore.signal()
+                    return
+                }
                 if let handler = self?.handler {
-                    box.value = await handler.handleAppControl(command)
+                    gate.complete(await handler.handleAppControl(command))
                 } else {
-                    box.value = Response(
+                    gate.complete(Response(
                         ok: false,
                         status: "error",
                         state: "unknown",
@@ -186,12 +194,17 @@ final class AppControlServer: @unchecked Sendable {
                         host: "127.0.0.1",
                         port: 8000,
                         message: "App control handler unavailable"
-                    )
+                    ))
                 }
                 semaphore.signal()
             }
-            _ = semaphore.wait(timeout: .now() + 30)
-            response = box.value ?? Response(
+            if semaphore.wait(timeout: .now() + 30) == .timedOut {
+                // If MainActor has not started this command, prevent a
+                // stateful request from running after the client times out.
+                // An action already in progress is allowed to finish.
+                gate.expireIfPending()
+            }
+            response = gate.value ?? Response(
                 ok: false,
                 status: "timeout",
                 state: "unknown",
@@ -239,6 +252,20 @@ final class AppControlServer: @unchecked Sendable {
         }
     }
 
+    /// A client may disconnect while a MainActor command is still pending.
+    /// Prevent a later response write from delivering SIGPIPE to the app.
+    @discardableResult
+    static func suppressSigPipe(on fd: Int32) -> Bool {
+        var enabled: Int32 = 1
+        return setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_NOSIGPIPE,
+            &enabled,
+            socklen_t(MemoryLayout<Int32>.size)
+        ) == 0
+    }
+
     static func defaultSocketURL() -> URL {
         AppConfig.appSupportURL().appendingPathComponent("control.sock")
     }
@@ -255,6 +282,44 @@ final class AppControlServer: @unchecked Sendable {
     }
 }
 
-private final class ResponseBox: @unchecked Sendable {
-    var value: AppControlServer.Response?
+final class AppControlRequestGate: @unchecked Sendable {
+    private enum State {
+        case pending
+        case started
+        case expired
+        case finished
+    }
+
+    private let lock = NSLock()
+    private var state: State = .pending
+    private var storedValue: AppControlServer.Response?
+
+    func beginHandling() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard case .pending = state else { return false }
+        state = .started
+        return true
+    }
+
+    func expireIfPending() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard case .pending = state else { return }
+        state = .expired
+    }
+
+    func complete(_ response: AppControlServer.Response) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard case .started = state else { return }
+        storedValue = response
+        state = .finished
+    }
+
+    var value: AppControlServer.Response? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedValue
+    }
 }

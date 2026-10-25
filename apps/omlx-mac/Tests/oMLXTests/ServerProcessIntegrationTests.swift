@@ -70,6 +70,51 @@ final class AutoRestartBudgetTests: XCTestCase {
     }
 }
 
+final class AppControlServerSocketTests: XCTestCase {
+    func testControlClientSocketSuppressesSigPipe() throws {
+        var sockets: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &sockets), 0)
+        defer {
+            close(sockets[0])
+            close(sockets[1])
+        }
+
+        XCTAssertTrue(AppControlServer.suppressSigPipe(on: sockets[0]))
+
+        var enabled: Int32 = 0
+        var optionLength = socklen_t(MemoryLayout<Int32>.size)
+        XCTAssertEqual(
+            getsockopt(sockets[0], SOL_SOCKET, SO_NOSIGPIPE, &enabled, &optionLength),
+            0
+        )
+        XCTAssertEqual(enabled, 1)
+    }
+
+    func testExpiredQueuedRequestDoesNotStartHandler() {
+        let gate = AppControlRequestGate()
+
+        gate.expireIfPending()
+
+        XCTAssertFalse(gate.beginHandling())
+    }
+
+    func testExpirationDoesNotPretendToCancelStartedHandler() {
+        let gate = AppControlRequestGate()
+        XCTAssertTrue(gate.beginHandling())
+
+        gate.expireIfPending()
+        let response = AppControlServer.Response.failure(
+            status: "completed",
+            state: .stopped,
+            server: nil,
+            message: "already started"
+        )
+        gate.complete(response)
+
+        XCTAssertEqual(gate.value?.status, "completed")
+    }
+}
+
 @MainActor
 final class ServerProcessIntegrationTests: XCTestCase {
 

@@ -734,14 +734,43 @@ def _open_macos_app() -> None:
     )
 
 
-def _send_app_control(command: str, timeout: float = 2.0) -> dict:
+_APP_CONTROL_CONNECT_TIMEOUT = 2.0
+_APP_CONTROL_RESPONSE_TIMEOUT = 35.0  # AppControlServer waits up to 30s for MainActor.
+
+
+class _AppControlConnectionError(OSError):
+    """The local app-control socket was not connected, so retrying is safe."""
+
+
+def _send_app_control(
+    command: str,
+    timeout: float = _APP_CONTROL_RESPONSE_TIMEOUT,
+    *,
+    deadline: float | None = None,
+) -> dict:
     import json
     import socket
+    import time
 
     sock_path = _app_control_socket_path()
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-        sock.settimeout(timeout)
-        sock.connect(str(sock_path))
+        connect_timeout = min(_APP_CONTROL_CONNECT_TIMEOUT, timeout)
+        if deadline is not None:
+            connect_timeout = min(connect_timeout, deadline - time.monotonic())
+        if connect_timeout <= 0:
+            raise TimeoutError("Timed out before connecting to oMLX.app control socket")
+        sock.settimeout(connect_timeout)
+        try:
+            sock.connect(str(sock_path))
+        except OSError as exc:
+            raise _AppControlConnectionError(*exc.args) from exc
+
+        response_timeout = timeout
+        if deadline is not None:
+            response_timeout = min(response_timeout, deadline - time.monotonic())
+        if response_timeout <= 0:
+            raise TimeoutError("Timed out before sending the oMLX.app control request")
+        sock.settimeout(response_timeout)
         sock.sendall(json.dumps({"command": command}).encode("utf-8") + b"\n")
         chunks: list[bytes] = []
         while True:
@@ -763,8 +792,12 @@ def _send_app_control_with_launch(command: str, timeout: float) -> dict:
     _open_macos_app()
     while time.monotonic() < deadline:
         try:
-            return _send_app_control(command)
-        except OSError as exc:
+            return _send_app_control(
+                command,
+                timeout=_APP_CONTROL_RESPONSE_TIMEOUT,
+                deadline=deadline,
+            )
+        except _AppControlConnectionError as exc:
             last_error = exc
             time.sleep(0.2)
     raise RuntimeError(f"Could not reach oMLX.app control socket: {last_error}")
@@ -776,7 +809,11 @@ def _wait_app_control_state(states: set[str], timeout: float) -> dict:
     deadline = time.monotonic() + timeout
     last: dict = {}
     while time.monotonic() < deadline:
-        last = _send_app_control("status")
+        last = _send_app_control(
+            "status",
+            timeout=_APP_CONTROL_RESPONSE_TIMEOUT,
+            deadline=deadline,
+        )
         if last.get("state") in states:
             return last
         time.sleep(0.5)
@@ -808,7 +845,7 @@ def lifecycle_command(args) -> int:
             if command == "stop":
                 try:
                     response = _send_app_control(command)
-                except OSError:
+                except _AppControlConnectionError:
                     print("oMLX stopped")
                     return 0
             else:

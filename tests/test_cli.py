@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -140,7 +140,11 @@ class TestLifecycleCommand:
 
         monkeypatch.setattr(install, "is_app_bundle", lambda: True)
         monkeypatch.setattr(install, "is_homebrew", lambda: False)
-        monkeypatch.setattr(cli, "_send_app_control", MagicMock(side_effect=OSError))
+        monkeypatch.setattr(
+            cli,
+            "_send_app_control",
+            MagicMock(side_effect=cli._AppControlConnectionError("unavailable")),
+        )
         monkeypatch.setattr(cli, "_open_macos_app", MagicMock())
 
         assert cli.lifecycle_command(self._args("stop")) == 0
@@ -175,6 +179,31 @@ class TestLifecycleCommand:
 
         assert cli.lifecycle_command(self._args("start")) == 0
         run_brew.assert_called_once_with("start")
+
+    def test_app_control_waits_for_server_response_deadline(self, monkeypatch):
+        """Socket reads outlast the app's 30s MainActor fallback, not just connect."""
+        from omlx import cli
+
+        client = MagicMock()
+        client.__enter__.return_value = client
+        client.recv.return_value = b'{"ok":true}\n'
+        monkeypatch.setattr(socket, "socket", lambda *_args: client)
+
+        assert cli._send_app_control("status") == {"ok": True}
+        assert client.settimeout.call_args_list == [call(2.0), call(35.0)]
+
+    def test_app_control_does_not_retry_uncertain_response(self, monkeypatch):
+        """Once connected, a timeout must not replay a stateful command."""
+        from omlx import cli
+
+        monkeypatch.setattr(cli, "_open_macos_app", MagicMock())
+        send = MagicMock(side_effect=TimeoutError("response timed out"))
+        monkeypatch.setattr(cli, "_send_app_control", send)
+
+        with pytest.raises(TimeoutError, match="response timed out"):
+            cli._send_app_control_with_launch("restart", timeout=10.0)
+
+        send.assert_called_once()
 
 
 class TestCLIEntryPoint:

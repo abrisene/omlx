@@ -321,6 +321,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.presentAppView()
             },
             openAppView: { [weak self] in self?.presentAppView() },
+            showHiddenMenubarWarning: { [weak self] in
+                guard let self else { return }
+                self.services.showHiddenMenubarWarning = true
+                self.presentAppView()
+            },
             openAppearanceSettings: { [weak self] in
                 guard let self else { return }
                 self.services.requestedSection = .appearance

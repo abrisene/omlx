@@ -37,6 +37,10 @@ final class AppServices: NSObject {
     var requestedServerAnchor: ServerAnchor?
     /// Quits and reopens oMLX. Set by AppDelegate.
     @ObservationIgnored var relaunchApp: @MainActor () -> Void = {}
+    /// Set when the launch-time status-item probe finds the menu bar icon
+    /// hidden. AppView presents the warning with SwiftUI so it does not block
+    /// the app-control server's MainActor callbacks.
+    var showHiddenMenubarWarning = false
 
     let client: OMLXClient
     let updates: UpdateController

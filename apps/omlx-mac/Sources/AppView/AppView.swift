@@ -119,6 +119,44 @@ struct AppView: View {
             )
                 .environment(\.omlxTheme, theme)
         }
+        .alert("oMLX Menubar Icon Hidden", isPresented: Binding(
+            get: { services.showHiddenMenubarWarning },
+            set: { services.showHiddenMenubarWarning = $0 }
+        )) {
+            if MenubarIconRecovery.isTahoeOrNewer {
+                Button("Auto-Fix") {
+                    MenubarIconRecovery.runAutofixFlow()
+                }
+                Button("Open Menu Bar Settings…") {
+                    MenubarIconRecovery.openMenuBarSettings()
+                }
+                Button("View Log") {
+                    MenubarLog.open()
+                }
+                Button("Dismiss", role: .cancel) {}
+            } else {
+                Button("View Log") {
+                    MenubarLog.open()
+                }
+                Button("Dismiss", role: .cancel) {}
+            }
+        } message: {
+            if MenubarIconRecovery.isTahoeOrNewer {
+                Text("""
+                The oMLX menubar icon isn't showing up.
+
+                On macOS Tahoe this is usually caused by the StatusKit approval flag being false in system preferences. Auto-Fix will approve oMLX and restart ControlCenter. It needs Full Disk Access.
+
+                You can also enable oMLX manually in System Settings > Menu Bar, or run this again later from Settings > Appearance > Menu Bar Icon.
+                """)
+            } else {
+                Text("""
+                The oMLX menubar icon isn't showing up.
+
+                macOS before Tahoe doesn't offer a System Settings toggle for third-party menubar apps. Try quitting and relaunching oMLX, and check menubar manager tools like Bartender or Ice if you use them.
+                """)
+            }
+        }
     }
 
     private func openHighlightedSetting() {
