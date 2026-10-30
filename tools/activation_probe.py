@@ -27,57 +27,79 @@ def write_json(path, data):
 
 def extract(args):
     import mlx.core as mx
-    from mlx_lm import load
+    from omlx.utils.model_loading import lm_load_compat, maybe_apply_pre_load_patches
     from omlx.activation_edits import dimensions, residual_edits
 
-    target = read_prompts(args.target)
-    contrast = read_prompts(args.contrast)
-    if not target or len(target) != len(contrast):
-        raise ValueError("Target and contrast files must contain equal, nonzero prompt counts")
-    if args.pairs is not None:
-        target, contrast = target[:args.pairs], contrast[:args.pairs]
-    model, tokenizer = load(args.model)
+    if args.responses:
+        pairs = [json.loads(line) for line in Path(args.responses).read_text().splitlines() if line.strip()]
+        for pair in pairs:
+            if not all(isinstance(pair.get(key), str) and pair[key] for key in ("prompt", "positive", "negative")):
+                raise ValueError("Response pairs require nonempty prompt, positive and negative strings")
+    else:
+        if not args.target or not args.contrast:
+            raise ValueError("Provide --responses or both --target and --contrast")
+        target, contrast = read_prompts(args.target), read_prompts(args.contrast)
+        if not target or len(target) != len(contrast):
+            raise ValueError("Target and contrast must have equal, nonzero counts")
+        pairs = [{"positive": p, "negative": n} for p, n in zip(target, contrast)]
+    pairs = pairs[:args.pairs] if args.pairs else pairs
+    if not pairs:
+        raise ValueError("At least one pair is required")
+    maybe_apply_pre_load_patches(args.model)
+    model, tokenizer = lm_load_compat(args.model)
     count, width = dimensions(model)
-    if not 0 <= args.layer < count:
-        raise ValueError(f"Layer must be in 0..{count - 1}")
+    layers = [int(value) for value in args.layer.split(",")]
+    if not layers or len(set(layers)) != len(layers) or any(not 0 <= layer < count for layer in layers):
+        raise ValueError(f"Layers must be unique and in 0..{count - 1}")
 
-    def capture(prompt):
-        captured = []
-
-        def observe(_layer, residual):
-            captured.append(residual[0, -1].astype(mx.float32))
-
+    def capture(pair, side):
+        captured = {}
+        prompt = pair.get("prompt", pair[side])
         tokens = tokenizer.apply_chat_template(
             [{"role": "user", "content": prompt}],
             tokenize=True, add_generation_prompt=True, enable_thinking=False,
         )
-        with residual_edits(model, (), observer=observe, layer_ids=[args.layer]):
-            logits = model(mx.array([tokens]))
-            mx.eval(logits, *captured)
-        if len(captured) != 1 or captured[0].shape != (width,):
-            raise RuntimeError("The selected layer did not produce one residual capture")
-        return captured[0]
+        start = len(tokens)
+        if args.responses:
+            tokens = tokens + tokenizer.encode(pair[side], add_special_tokens=False)
 
-    difference = mx.zeros((width,), dtype=mx.float32)
-    for index, (positive, negative) in enumerate(zip(target, contrast), 1):
-        difference = difference + capture(positive) - capture(negative)
-        mx.eval(difference)
-        print(f"Captured pair {index}/{len(target)}", flush=True)
-    difference = difference / len(target)
-    norm = float(mx.linalg.norm(difference).item())
-    if not math.isfinite(norm) or norm == 0:
-        raise RuntimeError("The contrast produced no finite residual direction")
-    direction = (difference / norm).tolist()
-    result = {
-        "format": "residual-direction-v1", "model": args.model,
-        "layer": args.layer, "layer_count": count, "width": width,
-        "injection": "post-block-add", "pairs": len(target),
-        "mean_difference_norm": norm, "direction": direction,
-        "target_sha256": hashlib.sha256(Path(args.target).read_bytes()).hexdigest(),
-        "contrast_sha256": hashlib.sha256(Path(args.contrast).read_bytes()).hexdigest(),
-    }
-    write_json(args.output, result)
-    print(f"Wrote {width} channels at layer {args.layer}; mean difference norm {norm:.6g}")
+        def observe(layer, residual):
+            values = residual[0, start:] if args.responses else residual[0, -1:]
+            captured[layer] = mx.mean(values.astype(mx.float32), axis=0)
+
+        with residual_edits(model, (), observer=observe, layer_ids=layers):
+            logits = model(mx.array([tokens]))
+            mx.eval(logits, *captured.values())
+        if set(captured) != set(layers) or any(value.shape != (width,) for value in captured.values()):
+            raise RuntimeError("Selected layers did not produce one residual capture each")
+        return captured
+
+    differences = {layer: mx.zeros((width,), dtype=mx.float32) for layer in layers}
+    for index, pair in enumerate(pairs, 1):
+        positive, negative = capture(pair, "positive"), capture(pair, "negative")
+        for layer in layers:
+            differences[layer] = differences[layer] + positive[layer] - negative[layer]
+        mx.eval(*differences.values())
+        print(f"Captured pair {index}/{len(pairs)}", flush=True)
+    for layer in layers:
+        difference = differences[layer] / len(pairs)
+        norm = float(mx.linalg.norm(difference).item())
+        if not math.isfinite(norm) or norm == 0:
+            raise RuntimeError("The contrast produced no finite residual direction")
+        result = {
+            "format": "residual-direction-v1", "model": args.model,
+            "layer": layer, "layer_count": count, "width": width,
+            "injection": "post-block-add", "pairs": len(pairs),
+            "mean_difference_norm": norm, "direction": (difference / norm).tolist(),
+            "capture": "response-token-mean" if args.responses else "prompt-last-token",
+        }
+        for name in ("responses", "target", "contrast"):
+            path = getattr(args, name)
+            if path:
+                result[name + "_sha256"] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        output = args.output if len(layers) == 1 else str(Path(args.output).with_name(Path(args.output).stem + f"-layer{layer}.json"))
+        write_json(output, result)
+        print(f"Wrote {output}; mean difference norm {norm:.6g}", flush=True)
 
 
 def request(args, prompt, edits):
@@ -168,9 +190,10 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     extraction = commands.add_parser("extract", help="Capture paired prompts with a local MLX model")
     extraction.add_argument("--model", required=True)
-    extraction.add_argument("--target", required=True)
-    extraction.add_argument("--contrast", required=True)
-    extraction.add_argument("--layer", required=True, type=int)
+    extraction.add_argument("--target")
+    extraction.add_argument("--contrast")
+    extraction.add_argument("--responses", help="JSONL prompt/positive/negative teacher-forced response pairs")
+    extraction.add_argument("--layer", required=True, help="Comma-separated zero-based layers; captured in one forward")
     extraction.add_argument("--pairs", type=int)
     extraction.add_argument("--output", required=True)
     extraction.set_defaults(run=extract)

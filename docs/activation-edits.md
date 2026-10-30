@@ -76,6 +76,32 @@ This establishes a causal output change and request isolation. It does not
 establish a reliable verbosity control. Strengths of magnitude 5 produced
 repetitive or incoherent output on this small model.
 
+## Same-content response contrasts
+
+`extract --responses pairs.jsonl` accepts one object per line with nonempty
+`prompt`, `positive`, and `negative` strings. Both responses are teacher-forced
+following the same user chat prefix (thinking disabled). The observer averages
+post-block residuals over response tokens only, then averages the paired
+positive-minus-negative differences and normalizes each layer independently.
+This avoids contrasting unrelated prompts when the desired axis is response
+style. It is still a candidate direction until held-out generation establishes
+its effect and coherence.
+
+```sh
+python -m tools.activation_probe extract \
+  --model /Users/dr/Models/Text/mlx-community/Qwen3.8-27B-4bit-MLXCommunity \
+  --responses tools/data/verbosity-responses.jsonl \
+  --layer 20,32,44 --output /tmp/verbosity.json
+```
+
+Comma-separated layers share each forward pass. Multiple layers produce separate
+`verbosity-layer20.json`, `verbosity-layer32.json`, and `verbosity-layer44.json`
+files with the existing `residual-direction-v1` format. A single layer keeps the
+exact output filename. Files record the capture method, source corpus hashes,
+exact model path, and unnormalized mean-difference norm. Positive values point
+toward the `positive` examples. Unit-vector dose is an absolute residual norm;
+use held-out topics and equal-norm random controls to choose doses.
+
 ## Isolated local server
 
 Use a fresh base path, a directory containing only the test model, an explicit
