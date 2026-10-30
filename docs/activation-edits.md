@@ -44,6 +44,38 @@ callback receives `(layer_index, post_block_array)`. Consume/evaluate the forwar
 inside the context. The context restores the exact owning layer instances even
 when an exposed pipeline layer list is a slice.
 
+## Contrastive probe
+
+From this repository, use the same layer hook to extract a direction from paired
+prompt files. The following example uses an existing local model and the DS4
+verbosity corpus. Its positive direction is verbose minus succinct.
+
+```sh
+python -m tools.activation_probe extract \
+  --model /Users/dr/Models/Text/mlx-community/Qwen3.5-0.8B-MLX-8bit \
+  --target /Users/dr/Models/Clients/ds4/dir-steering/examples/verbose.txt \
+  --contrast /Users/dr/Models/Clients/ds4/dir-steering/examples/succinct.txt \
+  --layer 12 --pairs 16 --output /tmp/verbosity.json
+
+python -m tools.activation_probe compare \
+  --url http://127.0.0.1:18731/v1 --model Qwen3.5-0.8B-MLX-8bit \
+  --direction /tmp/verbosity.json \
+  --prompts /Users/dr/Models/Clients/ds4/dir-steering/examples/eval_prompts.txt \
+  --scales=-0.25,0,0.25 --concurrent --output /tmp/comparison.json
+```
+
+The comparison tool also calls llama.cpp: change `--url` and `--model` to that
+server's API base and served model ID. It compares ordinary output before and
+after each edit, and optionally sends edited and ordinary requests concurrently.
+An API key can be read from the environment variable named by `--api-key-env`.
+
+On October 30, the 16-pair layer-12 direction changed greedy text on both local
+Qwen3.5-0.8B backends at strengths -0.25 and +0.25. Across five held-out prompts,
+all subsequent and concurrent ordinary requests matched their original output.
+This establishes a causal output change and request isolation. It does not
+establish a reliable verbosity control. Strengths of magnitude 5 produced
+repetitive or incoherent output on this small model.
+
 ## Isolated local server
 
 Use a fresh base path, a directory containing only the test model, an explicit
