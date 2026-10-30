@@ -30,6 +30,8 @@ def extract(args):
     from omlx.utils.model_loading import lm_load_compat, maybe_apply_pre_load_patches
     from omlx.activation_edits import dimensions, residual_edits
 
+    if args.responses and (args.target or args.contrast):
+        raise ValueError("--responses cannot be combined with --target or --contrast")
     if args.responses:
         pairs = [json.loads(line) for line in Path(args.responses).read_text().splitlines() if line.strip()]
         for pair in pairs:
