@@ -22,6 +22,8 @@ from omlx.api.shared_models import (
     get_unix_timestamp,
 )
 
+from ..activation_edits import ActivationEdit
+
 # =============================================================================
 # Content Types
 # =============================================================================
@@ -397,6 +399,7 @@ class ChatCompletionRequest(BaseModel):
     top_logprobs: Optional[int] = Field(default=None, ge=0, le=20)
     # oMLX chat-owned generation policy (phase sampling and lexicon steering).
     generation_policy: Optional[Dict[str, Any]] = None
+    activation_edits: Optional[List[ActivationEdit]] = None
 
     @field_validator("stop", mode="before")
     @classmethod
@@ -542,6 +545,13 @@ class ChatCompletionResponse(BaseModel):
 
 class CompletionRequest(BaseModel):
     """Request for text completion."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_activation_edits(cls, value):
+        if isinstance(value, dict) and value.get("activation_edits"):
+            raise ValueError("activation_edits is supported on /v1/chat/completions only")
+        return value
 
     model: str
     prompt: Union[str, List[str]]
@@ -693,6 +703,7 @@ class ModelInfo(BaseModel):
     # effective context window from the listing without a separate call
     # to /v1/models/status (see #1308).
     max_model_len: int | None = None
+    activation_edit_dimensions: Optional[Dict[str, Any]] = None
     # Claude Desktop (Anthropic gateway mode) extensions. Only serialized on
     # derived Claude tier alias entries (see ClaudeTierModelInfo below);
     # excluded by default so standard entries omit tier-specific metadata.

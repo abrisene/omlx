@@ -160,6 +160,8 @@ class SamplingParams:
     # Read-only logits processor, applied after every other processor.
     logits_observer: Any = None
 
+    activation_edits: Any = None
+
     # Chat-owned phase sampling and lexicon steering policy.
     generation_policy: Optional[Dict[str, Any]] = None
 

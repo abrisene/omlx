@@ -70,6 +70,8 @@ from pydantic import BaseModel, Field
 
 from omlx._version import __version__
 
+from .activation_edits import metadata_from_path
+
 from .api.anthropic_models import (
     MessagesRequest as AnthropicMessagesRequest,
 )
@@ -3882,6 +3884,7 @@ async def list_models(_: bool = Depends(verify_inference_api_key)) -> JSONRespon
                     owned_by="omlx",
                     model_type=m.get("model_type"),
                     max_model_len=get_max_context_window(model_id),
+                    activation_edit_dimensions=metadata_from_path(m.get("model_path")),
                 )
             )
         # Both sets are needed by the exposed-profile and Claude tier-alias
@@ -5287,6 +5290,8 @@ async def create_chat_completion(
             chat_kwargs["repetition_context_size"] = repetition_context_size
         chat_kwargs.update(_no_repeat_ngram_kwargs(request))
         chat_kwargs.update(_ignore_eos_kwargs(request))
+        if request.activation_edits:
+            chat_kwargs["activation_edits"] = [edit.model_dump() for edit in request.activation_edits]
         chat_kwargs.update(_cache_store_kwargs(http_request))
         generation_policy = getattr(request, "generation_policy", None)
         if generation_policy:

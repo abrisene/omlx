@@ -5022,6 +5022,7 @@ class VLMBatchedEngine(BaseEngine):
             logprobs=bool(kwargs.get("logprobs", False)),
             top_logprobs=kwargs.get("top_logprobs"),
             generation_policy=kwargs.get("generation_policy", None),
+            activation_edits=kwargs.get("activation_edits"),
         )
 
         # SpecPrefill: forward per-request overrides to the engine, mirroring
@@ -5206,6 +5207,7 @@ class VLMBatchedEngine(BaseEngine):
             logprobs=bool(kwargs.get("logprobs", False)),
             top_logprobs=kwargs.get("top_logprobs"),
             generation_policy=kwargs.get("generation_policy", None),
+            activation_edits=kwargs.get("activation_edits"),
         )
 
         # SpecPrefill: pass per-request overrides

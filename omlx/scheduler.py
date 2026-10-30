@@ -52,6 +52,8 @@ from mlx_lm.sample_utils import make_logits_processors
 from mlx_lm.tokenizer_utils import _byte_decoder
 from mlx_vlm.models import cache as _vlm_cache
 
+from .activation_edits import activation_step, admission_allowed, request_edits, validate_edits
+
 from .cache.deepseek_v41_delta import compact_snapshot as compact_deepseek_v41_snapshot
 from .cache.deepseek_v41_delta import is_delta as is_deepseek_v41_delta
 from .cache.observability import BoundarySnapshotDiagnostics, CacheRateTracker
@@ -9145,6 +9147,9 @@ class Scheduler:
         snapshot_block_size: int | None = None,
     ) -> None:
         """Record a prefill boundary or a verified terminal response snapshot."""
+        request = self.requests.get(request_id)
+        if request is not None and request_edits(request):
+            return
         if self._model_has_unreconstructible_cache():
             return
 
@@ -9600,6 +9605,8 @@ class Scheduler:
 
     def _maybe_capture_boundary_snapshot(self, request: Request, uid: int) -> None:
         """Capture cache snapshot exactly at block boundaries for safe reuse."""
+        if request_edits(request):
+            return
         if self._model_has_unreconstructible_cache():
             return
 
@@ -11144,6 +11151,10 @@ class Scheduler:
         return result
 
     def _prepare_prefix_cache_for_request(self, request: Request) -> None:
+        if request_edits(request):
+            request.remaining_tokens = request.prompt_token_ids
+            self._prefix_cache_prepared.add(request.request_id)
+            return
         if request.request_id in self._prefix_cache_prepared:
             return
 
@@ -11426,6 +11437,17 @@ class Scheduler:
                 current_depth=len(self.waiting),
                 max_depth=max_waiting,
             )
+
+        if request_edits(request):
+            request.sampling_params.activation_edits = validate_edits(self.model, request_edits(request))
+            if (_block_drafter_for(self.model) is not None
+                    or self._vlm_mtp_drafter is not None
+                    or any(getattr(part, "_omlx_mtp_decode_enabled", False) is True
+                           for part in (self.model, getattr(self.model, "_language_model", None),
+                                        getattr(self.model, "language_model", None)))
+                    or getattr(request, "_specprefill_enabled", False)):
+                raise InvalidRequestError("activation_edits requires speculative decoding to be disabled")
+            request.skip_cache_store = True
 
         # Tokenize if needed
         if request.prompt_token_ids is None:
@@ -13380,6 +13402,8 @@ class Scheduler:
             # continue. First request always passes (no admitted work yet)
             # so admission can recover by completing the current generation.
             admitted = self._num_admitted_requests()
+            if not admission_allowed(self, self.waiting[0]):
+                break
             if self._admission_paused and admitted:
                 logger.debug(
                     "Admission paused by memory pressure, %d admitted",
@@ -13478,7 +13502,7 @@ class Scheduler:
             request = self.waiting[0]
             self._clear_memory_admission_blocker(request.request_id)
             self._clear_store_cache_admission_blocker(request.request_id)
-            if self._should_defer_for_cache_freshness(request):
+            if not request_edits(request) and self._should_defer_for_cache_freshness(request):
                 break
 
             request = self.waiting.popleft()
@@ -15867,6 +15891,7 @@ class Scheduler:
             eviction.reason,
         )
 
+    @activation_step
     def step(self) -> SchedulerOutput:
         """
         Execute one scheduling step with automatic error recovery.
