@@ -70,7 +70,7 @@ after each edit, and optionally sends edited and ordinary requests concurrently.
 An API key can be read from the environment variable named by `--api-key-env`.
 
 On October 30, the 16-pair layer-12 direction changed greedy text on both local
-Qwen3.5-0.8B backends at strengths -0.25 and +0.25. Across five held-out prompts,
+Qwen3.5-0.8B backends at strengths -0.25 and +0.25. Across five evaluation prompts,
 all subsequent and concurrent ordinary requests matched their original output.
 This establishes a causal output change and request isolation. It does not
 establish a reliable verbosity control. Strengths of magnitude 5 produced
