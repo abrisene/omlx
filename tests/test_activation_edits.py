@@ -65,6 +65,22 @@ def test_bounds_and_duplicate_validation():
             validate_edits(model, edits)
 
 
+def test_residual_layer_width_overrides_outer_vision_width():
+    model = Model()
+    model.config = NS(hidden_size=1536)
+    model.layers[0].input_layernorm = nn.RMSNorm(5376)
+    assert dimensions(model) == (2, 5376)
+    assert validate_edits(model, [dict(layer=0, neuron=5375, add=1)])
+    with pytest.raises(InvalidRequestError):
+        validate_edits(model, [dict(layer=0, neuron=5376, add=1)])
+
+
+def test_explicit_text_config_precedes_multimodal_hidden_size():
+    model = Model()
+    model.config = NS(hidden_size=1536, text_config={"hidden_size": 5376})
+    assert dimensions(model) == (2, 5376)
+
+
 def test_effect_capture_and_cleanup_on_failure():
     model = Model()
     originals = list(model.layers)

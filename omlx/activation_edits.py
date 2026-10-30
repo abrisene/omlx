@@ -32,6 +32,27 @@ class ActivationEdit(BaseModel):
 
 def dimensions(model):
     layers = model.layers
+
+    def field(value, name):
+        attribute = getattr(value, name, None)
+        return value.get(name) if attribute is None and isinstance(value, dict) else attribute
+
+    def configured_width(value):
+        for name in ("hidden_size", "dim", "d_model"):
+            width = field(value, name)
+            if isinstance(width, int) and not isinstance(width, bool) and width > 0:
+                return width
+        return None
+
+    if layers:
+        weight = getattr(getattr(layers[0], "input_layernorm", None), "weight", None)
+        if weight is not None and len(weight.shape) == 1 and weight.shape[0] > 0:
+            return len(layers), weight.shape[0]
+        for name in ("config", "args"):
+            width = configured_width(field(layers[0], name))
+            if width is not None:
+                return len(layers), width
+
     candidates = [model]
     seen = set()
     for candidate in candidates:
@@ -46,14 +67,14 @@ def dimensions(model):
             "args",
             "text_config",
         ):
-            child = getattr(candidate, name, None)
+            child = field(candidate, name)
             if child is not None and id(child) not in seen:
                 candidates.append(child)
-    for candidate in candidates:
-        for name in ("hidden_size", "dim", "d_model"):
-            width = getattr(candidate, name, None)
-            if isinstance(width, int) and width > 0:
-                return len(layers), width
+    language_configs = [field(candidate, "text_config") for candidate in candidates]
+    for candidate in language_configs + candidates:
+        width = configured_width(candidate)
+        if width is not None:
+            return len(layers), width
     raise InvalidRequestError("Cannot determine residual width for activation_edits")
 
 
