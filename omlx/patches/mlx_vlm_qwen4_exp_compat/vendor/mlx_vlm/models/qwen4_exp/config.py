@@ -52,6 +52,7 @@ class TextConfig(BaseModelConfig):
     ngram_vocab_size_base: int = 20_000_000
     make_ngram_vocab_size_divisible_by: int = 128
     split_ngram_parts: int = 128
+    ple_storage: Optional[Dict] = None
     seed: int = 1234
     indexer_n_heads: int = 4
     indexer_kv_heads: int = 1

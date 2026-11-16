@@ -16,6 +16,16 @@ from omlx.exceptions import InvalidRequestError
 from omlx.utils.model_loading import maybe_apply_pre_load_patches
 
 
+@pytest.fixture(autouse=True)
+def restore_qwen4_runtime_state():
+    from omlx.patches import mlx_vlm_qwen4_exp_compat as compat
+    compat.apply_mlx_vlm_qwen4_exp_compat_patch()
+    from mlx_vlm.models.qwen4_exp import language
+    saved = (language._PLE_RUNTIME_MODE, language._PLE_RUNTIME_MODEL_PATH, language._MTP_RUNTIME)
+    yield
+    language._PLE_RUNTIME_MODE, language._PLE_RUNTIME_MODEL_PATH, language._MTP_RUNTIME = saved
+
+
 def test_qwen4_exp_runtime_rejects_audio_only():
     engine = VLMBatchedEngine("qwen4")
     engine._vlm_model = SimpleNamespace(
@@ -134,7 +144,6 @@ async def test_vlm_loader_passes_configured_adapter_path(tmp_path, monkeypatch):
 
     monkeypatch.setattr(vlm_utils, "load", stop_after_load)
     monkeypatch.setattr(vlm_module, "_patch_video_processor_bug", lambda: None)
-    monkeypatch.setattr(vlm_module, "_patch_torch_free_image_processor", lambda: None)
     monkeypatch.setattr(vlm_module, "apply_pixtral_torch_free_patch", lambda: None)
     monkeypatch.setattr(
         model_loading, "maybe_apply_pre_load_patches", lambda *a, **k: None
