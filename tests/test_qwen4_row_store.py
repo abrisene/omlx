@@ -1,4 +1,4 @@
-"""External PLE checkpoints use the released reader and preserve quantized rows."""
+"""External PLE checkpoints preserve quantized rows through the shared SSD path."""
 import importlib
 import json
 
@@ -53,8 +53,9 @@ def test_external_ple_matches_direct_dequantization_and_keeps_duplicate_order(tm
     ids = mx.array([[35, 0, 35, 12]], dtype=mx.int64)
     actual = embedding.ngram_embedding(ids)
     assert mx.array_equal(actual, expected[ids]).item()
-    from mlx_vlm.models.qwen4_exp.ple_storage import QuantizedMMapNGramEmbedding
-    assert isinstance(embedding.ngram_embedding, QuantizedMMapNGramEmbedding)
+    embedding.ngram_embedding.prefetch(ids)
+    assert mx.array_equal(embedding.ngram_embedding(ids), expected[ids]).item()
+    embedding.ngram_embedding.close()
 
 
 def test_external_ple_rejects_geometry_mismatch(tmp_path):

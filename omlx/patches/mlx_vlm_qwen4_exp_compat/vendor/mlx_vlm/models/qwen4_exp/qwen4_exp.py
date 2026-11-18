@@ -154,13 +154,7 @@ class Model(Qwen3_5Model):
             for key in [key for key in weights if _NGRAM_STORAGE_RE.search(key)]:
                 weights.pop(key)
         weights = dequantize_fp8_weights(weights, copy_weights=False)
-        # External quantized rows carry their own scales; there is no MLX
-        # embedding weight_scale parameter to synthesize or load.
-        ple_layers = (
-            () if getattr(self.config.text_config, "ple_storage", None)
-            else getattr(self.config.text_config, "ple_layer_ids", ())
-        )
-        for layer_id in ple_layers:
+        for layer_id in getattr(self.config.text_config, "ple_layer_ids", ()):
             source_scale_key = (
                 f"model.language_model.layers.{int(layer_id) - 1}.ple."
                 "ple_embedding.ngram_embedding.weight_scale"

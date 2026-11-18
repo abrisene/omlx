@@ -130,6 +130,8 @@ def _ple_reader(table: Any, language: Any) -> Callable[[np.ndarray], tuple]:
                 raise RuntimeError("PLE shards with mixed formats are not supported")
             buffers = table._assemble(rows, plan)
             _, _, _, _, families, dtypes, bits, group_size = plan
+            if bits and 2 not in families:
+                raise RuntimeError("Prefill helper does not support nvfp4 PLE rows")
             arrays = [
                 (buffers[f], _SAFETENSORS_DTYPES.get(dtypes[f], dtypes[f].lower()))
                 for f in families

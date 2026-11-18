@@ -65,30 +65,19 @@ class Qwen4ExpNGramEmbedding(nn.Module):
             embedding_dim // self.ngram_heads,
             config.split_ngram_parts,
         )
-        if config.ple_storage:
-            from .ple_storage import QuantizedMMapNGramEmbedding
-
-            manifest = config.ple_storage.get("manifest")
-            if not manifest:
-                raise ValueError("ple_storage requires a manifest path")
-            self.ngram_embedding = QuantizedMMapNGramEmbedding(
-                manifest, cache_rows=config.ple_storage.get("cache_rows")
-            )
-            if self.ngram_embedding.row_count != padded_vocab_size:
-                raise ValueError("external PLE row count does not match model configuration")
-            if self.ngram_embedding.row_width != embedding_args[1]:
-                raise ValueError("external PLE row width does not match model configuration")
-        elif runtime._PLE_RUNTIME_MODE == "mmap":
-            if runtime._PLE_RUNTIME_MODEL_PATH is None:
-                raise RuntimeError("SSD-backed PLE has no configured model path")
+        if config.ple_storage or runtime._PLE_RUNTIME_MODE == "mmap":
+            model_path = runtime._PLE_RUNTIME_MODEL_PATH
+            if model_path is None:
+                manifest = (config.ple_storage or {}).get("manifest")
+                if not manifest or not runtime.Path(manifest).is_absolute():
+                    raise RuntimeError("SSD-backed PLE has no configured model path")
+                model_path = runtime.Path(manifest).parent
             prefix = (
                 f"model.language_model.layers.{layer_idx}.ple.ple_embedding."
                 "ngram_embedding"
             )
             self.ngram_embedding = runtime.DiskBackedShardedEmbedding(
-                runtime._PLE_RUNTIME_MODEL_PATH,
-                prefix,
-                *embedding_args,
+                model_path, prefix, *embedding_args, storage=config.ple_storage,
             )
         else:
             self.ngram_embedding = runtime.ShardedEmbedding(*embedding_args)
