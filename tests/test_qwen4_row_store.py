@@ -63,3 +63,27 @@ def test_external_ple_rejects_geometry_mismatch(tmp_path):
     config.ple_embed_dim *= 2
     with pytest.raises(ValueError, match="row width"):
         language.Qwen4ExpNGramEmbedding(config, config.ple_embed_dim, 0, 0)
+
+
+def test_external_nvfp4_rows_match_direct_dequantization_after_prefetch(tmp_path):
+    config, _ = row_store(tmp_path)
+    original = (mx.arange(36 * 32).reshape(36, 32) % 19).astype(mx.bfloat16)
+    weight, scales = mx.quantize(original, bits=4, group_size=16, mode="nvfp4")
+    expected = mx.dequantize(weight, scales, group_size=16, bits=4, mode="nvfp4")
+    mx.eval(weight, scales, expected)
+    with (tmp_path / "table.rows").open("wb") as out:
+        for row in range(36):
+            out.write(np.asarray(weight[row]).tobytes())
+            out.write(np.asarray(scales[row]).tobytes())
+    manifest = tmp_path / "ple-store.json"
+    data = json.loads(manifest.read_text())
+    data.update(row_stride=18, quantization={"bits": 4, "group_size": 16, "mode": "nvfp4"})
+    manifest.write_text(json.dumps(data))
+    embedding = language.Qwen4ExpNGramEmbedding(config, config.ple_embed_dim, 0, 0)
+    ids = mx.array([[35, 0, 35, 12]], dtype=mx.int64)
+    try:
+        embedding.ngram_embedding.prefetch(ids)
+        assert mx.array_equal(embedding.ngram_embedding(ids), expected[ids]).item()
+        assert embedding.ngram_embedding.last_prefetch_hit
+    finally:
+        embedding.ngram_embedding.close()

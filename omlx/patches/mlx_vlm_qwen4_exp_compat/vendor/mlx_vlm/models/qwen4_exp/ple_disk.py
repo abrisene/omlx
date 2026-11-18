@@ -50,6 +50,8 @@ class DiskBackedShardedEmbedding(nn.Module):
         self.rows_read = 0
         self.last_uploads = 0
         self.last_prefetch_hit = False
+        self._external_storage = storage is not None
+        self._prefetch_engagement_logged = False
         self._pending: dict[bytes, tuple] = {}
         self._prefetch_lock = Lock()
         self._prefetch_closed = False
@@ -207,6 +209,9 @@ class DiskBackedShardedEmbedding(nn.Module):
         if pending is not None:
             plan, buffers = pending[0], pending[1].result()
             self.last_prefetch_hit = True
+            if self._external_storage and not self._prefetch_engagement_logged:
+                self._prefetch_engagement_logged = True
+                runtime.logger.info("External PLE row-store prefetch engaged for %s", self._prefix)
         else:
             self.last_prefetch_hit = False
             plan = self._plan(host)
