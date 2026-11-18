@@ -275,7 +275,7 @@ class TestSchedulerStepOutputs:
         )
         scheduler._cleanup_finished = MagicMock()
 
-        scheduler.running = {"running": MagicMock()}
+        scheduler.running = {"running": MagicMock(sampling_params=SamplingParams())}
         scheduler.batch_generator = MagicMock()
         scheduler.batch_generator.next_generated.return_value = iter([MagicMock()])
 
@@ -294,7 +294,7 @@ class TestSchedulerStepOutputs:
         scheduler._process_batch_responses = MagicMock(return_value=([], set()))
         scheduler._cleanup_finished = MagicMock()
 
-        scheduler.running = {"running": MagicMock()}
+        scheduler.running = {"running": MagicMock(sampling_params=SamplingParams())}
         scheduler.batch_generator = MagicMock()
         scheduler.batch_generator.next_generated.return_value = iter([MagicMock()])
         scheduler._decode_eval_kv_cache_interval = 256
@@ -2366,7 +2366,7 @@ class TestSchedulerStatistics:
         scheduler._schedule_waiting = MagicMock(return_value=([], []))
         scheduler._process_batch_responses = MagicMock(return_value=([], set()))
         scheduler._cleanup_finished = MagicMock()
-        scheduler.running = {f"row-{i}": MagicMock() for i in range(9)}
+        scheduler.running = {f"row-{i}": MagicMock(sampling_params=SamplingParams()) for i in range(9)}
         scheduler.batch_generator = MagicMock()
         for _ in range(2):
             scheduler.batch_generator.next_generated.return_value = iter([])

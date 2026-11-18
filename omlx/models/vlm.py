@@ -570,10 +570,10 @@ class VLMModelAdapter(nn.Module):
         if hook is not None:
             hook(next_ids, current_ids, cache=cache)
 
-    def ple_gathers_ahead(self) -> bool:
+    def ple_gathers_ahead(self, *, narrow_first: bool = False) -> bool:
         """Whether the language model gathers PLE rows one prefill chunk ahead."""
         probe = getattr(self._language_model, "ple_gathers_ahead", None)
-        return bool(probe()) if probe is not None else False
+        return bool(probe(narrow_first=narrow_first)) if probe is not None else False
 
     def bind_prefill_prompt_ids(self, prompt_ids: Optional[List[int]]) -> None:
         """Bind the full prompt ids of the request whose prefill call runs next.

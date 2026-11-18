@@ -51,6 +51,9 @@ class DiskBackedShardedEmbedding(nn.Module):
         self.last_uploads = 0
         self.last_prefetch_hit = False
         self._external_storage = storage is not None
+        self.prefill_first_chunk = (storage or {}).get(
+            "prefill_first_chunk", "wide" if storage else "narrow"
+        )
         self._prefetch_engagement_logged = False
         self._pending: dict[bytes, tuple] = {}
         self._prefetch_lock = Lock()

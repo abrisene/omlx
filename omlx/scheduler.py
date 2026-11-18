@@ -3470,7 +3470,7 @@ class Scheduler:
         return 0
 
     def _qwen4_ple_gathers_ahead(self) -> bool:
-        """True when SSD-backed PLE rows are gathered one prefill chunk ahead.
+        """Whether PLE gather-ahead should start with a narrow prefill chunk.
 
         Only then does a narrow first chunk buy anything: it lets the gather
         of the next chunk overlap GPU work. Models without a probe count as
@@ -3482,7 +3482,7 @@ class Scheduler:
         if probe is None:
             return True
         try:
-            return bool(probe())
+            return bool(probe(narrow_first=True))
         except Exception:
             logger.debug("qwen4 PLE gather-ahead probe failed", exc_info=True)
             return True

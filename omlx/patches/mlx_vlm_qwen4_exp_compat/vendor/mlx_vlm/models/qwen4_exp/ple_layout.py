@@ -7,6 +7,8 @@ _DTYPES = {"U32": 4, "BF16": 2, "U8": 1}
 
 
 def external_layout(model_path, storage, prefix, rows, dims):
+    if storage.get("prefill_first_chunk", "wide") not in {"wide", "narrow"}:
+        raise ValueError("external PLE prefill_first_chunk must be wide or narrow")
     manifest = storage.get("manifest")
     if not manifest:
         raise ValueError("ple_storage requires a manifest path")

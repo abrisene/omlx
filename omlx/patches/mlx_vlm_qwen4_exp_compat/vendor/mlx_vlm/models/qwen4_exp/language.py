@@ -4380,12 +4380,20 @@ class LanguageModel(Qwen3_5LanguageModel):
             if step is not None:
                 _MTP_ONE_ROW_STEP.reset(step)
 
-    def ple_gathers_ahead(self) -> bool:
-        """True when an SSD-backed PLE table gathers rows one prefill chunk ahead."""
+    def ple_gathers_ahead(self, *, narrow_first: bool = False) -> bool:
+        """Whether PLE reads ahead; optionally query its first-chunk policy.
+
+        External row stores keep wide-first geometry by default. Read-ahead
+        remains active for later chunks without changing recurrent rounding.
+        """
         for layer in self.model.layers:
             ple = getattr(layer, "ple", None)
-            if ple is not None and getattr(ple.ple_embedding.ngram_embedding, "prefetch", None) is not None:
-                return True
+            if ple is not None:
+                table = ple.ple_embedding.ngram_embedding
+                if getattr(table, "prefetch", None) is not None and (
+                    not narrow_first or getattr(table, "prefill_first_chunk", "narrow") == "narrow"
+                ):
+                    return True
         return False
 
     def prefetch_ple(self, next_ids: mx.array, current_ids: mx.array) -> None:
